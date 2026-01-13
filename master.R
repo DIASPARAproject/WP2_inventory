@@ -1,0 +1,100 @@
+
+# 1. PREPARATION TO RUN SCRIPT #################################################  
+
+# define libraries needed
+libs <- c("icesTAF", "rmarkdown")
+
+#define libraries already installed
+installed_libs <- libs %in% rownames(installed.packages())
+
+# install libraries that are not installed already
+if (any(installed_libs == F)) {
+  install.packages(libs[!installed_libs])
+}
+
+# load libraries needed
+invisible(lapply(libs, library, character.only = T))
+
+
+# set working directory and run taf.skeleton to create folder structure
+taf.skeleton()
+
+
+# 2. CREATE METADATA (.bib file) ###############################################
+
+#create metadata for script
+draft.data(data.scripts = "compilation.R",
+           data.files = NULL,
+           originator = "WGEEL",
+           title = "Individual eel data pulled from WGEEL database as of 01-16-2025, individual biometric data (time series & sampling series combined)",
+           file = TRUE,
+           period = "x-2025",
+           access = "Restricted",
+           append = F
+)
+
+
+# 3. IMPORT DATA FROM ABOVE TO BOOTSTRAP/DATA FOLDER ###########################
+
+# bring all in DATA.bib to the bootstrap/data folder (from "initial/data"). Existing data will not be overwritten(? it re-downloads... Also, files not in DATA.bib that are already in data folder will be deleted!)! Delete those where an update is required!
+taf.boot(software = FALSE) 
+
+#create output.rmd
+#if (!file.exists("output_inventory.rmd")) {
+#  file.create("output_inventory.rmd")
+#} else {
+#  message("Die Datei existiert bereits.")
+#}
+
+
+
+# 4. CREATE UTILITIES ##########################################################
+
+#source("utilities/utilities.R") 
+
+
+
+
+#--------------------------------------------------------------------------------#
+#####----- RUN SCRIPT FROM HERE IF YOU DO NOT WANT TO IMPORT DATA AGAIN -----#####
+#--------------------------------------------------------------------------------#
+
+# 5. (RE)LOAD LIBRARIES ########################################################
+
+# define libraries needed
+libs <- c("icesTAF", "rmarkdown")
+
+#define libraries already installed
+installed_libs <- libs %in% rownames(installed.packages())
+
+# install libraries that are not installed already
+if (any(installed_libs == F)) {
+  install.packages(libs[!installed_libs])
+}
+
+# load libraries needed
+invisible(lapply(libs, library, character.only = T))
+
+
+
+
+# 6. SOURCE SCRIPTS  ########################################################### 
+
+# remove all folders (including what's in them, that were created by the scripts below)
+clean()
+
+# delete everything from the R environment
+rm(list = ls())
+
+# run the scripts
+source("data.R")
+  rmarkdown::render('data_issues.Rmd', output_file = "data/issues/issues.html")
+  source("data_issues_call.R")
+  source("data_LHTsite.R")
+  source("data_LHTemu.R")
+#source("model.R")
+source("output.R")
+  rmarkdown::render('output_inventory.Rmd', output_file = "output/inventory/inventory.docx")
+  #rmarkdown::render('output_overview.Rmd', output_file = "output/overview/overview.docx")
+#source("report.R")
+

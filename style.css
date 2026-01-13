@@ -1,0 +1,48 @@
+/* Whole document: */
+body{
+  font-family: Arial;
+  font-size: 12pt;
+}
+
+.flextable {
+  text-align: left !important;
+  float: left; !important;
+}
+
+/* Title */
+h1.title{
+  font-size: 32pt;
+  color: black;
+  font-family: Times New Roman;;
+}
+
+/* Headers */
+
+h1{
+  font-size: 28pt;
+  color: black;
+}
+
+h2{
+  font-size: 24pt;
+}
+
+h3{
+  font-size: 20pt;
+}
+
+h4{
+  font-size: 10pt;
+  color: #454545;
+}
+
+h5{
+  font-size: 12pt;
+}
+
+h6{
+  font-size: 12pt;
+}
+
+
+

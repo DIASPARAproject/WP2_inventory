@@ -1,0 +1,566 @@
+---
+title: 'DIASPARA WP2 EEL Inventory v1'
+author: 'Jan-Dag Pohlmann'
+date: '02-04-2025'
+output: 
+  word_document: default
+  html_document: 
+    css: style.css
+  pdf_document: default
+---
+
+```{r Initial preparations, echo=FALSE, warning = FALSE, message = FALSE}
+
+# define libraries needed
+libs <- c("tidyverse", "icesTAF", "stringr", "flextable", "sf", "ggplot2", "viridis") 
+
+#define libraries already installed
+installed_libs <- libs %in% rownames(installed.packages())
+
+# install libraries that are not installed already
+if (any(installed_libs == F)) {
+  install.packages(libs[!installed_libs])
+}
+
+### load libraries needed
+invisible(lapply(libs, library, character.only = T))
+
+#load data 
+load("boot/data/compilation/individual_wide.RData") 
+load("data/individual_all.RData")
+
+#load shapefile of EMUs
+EMUs <- read_sf("utility/emu_shapefile/emu.shp")
+
+
+#create a basic map for later use
+map_basic <- ggplot() +
+  geom_sf(data = EMUs, color = "black", fill = "grey90", size = 0.25)+
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+```
+
+# Data Inventory
+
+## Counts of eels, countries, EMUs, sites
+
+```{r numbers for text, echo=FALSE, warning = FALSE, message = FALSE}
+
+# 2.1 Totals ####
+#total number of individuals
+total_individuals_n <- nrow(individual_wide)
+cat(paste("Total number of eels:", total_individuals_n, sep = " "), "\n")
+cat("\n")
+
+#total number of countries
+total_countries <- unique(individual_wide$ser_cou_code)
+total_countries_n <- length(unique(individual_wide$ser_cou_code))
+cat(sprintf("Total number of countries: %d (%s)\n", total_countries_n, sprintf("%s", paste(total_countries, collapse = ", "))))
+cat("\n")
+
+#total number of EMUs
+total_emus <- unique(individual_wide$ser_emu_nameshort)
+total_emus_n <- length(unique(individual_wide$ser_emu_nameshort))
+#cat(paste(paste("Total number of EMUs:", n_EMUs, sep = " "), " (", paste(format(EMUs_total, big.mark = ","), collapse =", "), ")", sep = ""), "\n")
+cat(sprintf("Total number of EMUs: %d (%s)\n", total_emus_n, sprintf("%s", paste(total_emus, collapse = ", "))))
+cat("\n")
+
+
+# 2.2 Series (TSD) ####
+#total number individuals from series
+series_individuals_n <- nrow(individual_wide %>% filter(source == "series"))
+cat(paste("Total number of eels in series:", series_individuals_n, sep = " "), "\n")
+cat("\n")
+
+#total number of countries providing time series data
+series_countries <- unique((individual_wide %>% filter(source == "series"))$ser_cou_code)
+series_countries_n <- length(unique((individual_wide %>% filter(source == "series"))$ser_cou_code))
+cat(sprintf("Total number of countries in series: %d (%s)\n", series_countries_n, sprintf("%s", paste(series_countries, collapse = ", "))))
+cat("\n")
+
+#total number of series
+series_sites <- unique((individual_wide %>% filter(source == "series"))$ser_nameshort)
+series_sites_n <- length(unique((individual_wide %>% filter(source == "series"))$ser_nameshort))
+cat(sprintf("Total number of sites in series: %d (%s)\n", series_sites_n, sprintf("%s", paste(series_sites, collapse = ", "))))
+cat("\n")
+
+
+# 2.3 Sampling (OSD) ####
+#total number individuals from sampling
+sampling_individuals_n <- nrow(individual_wide %>% filter(source == "sampling"))
+cat(paste("Total number of eels in other sampling:", sampling_individuals_n, sep = " "), "\n")
+cat("\n")
+
+#total number of countries providing other sampling data
+sampling_countries <- unique((individual_wide %>% filter(source == "sampling"))$ser_cou_code)
+sampling_countries_n <- length(unique((individual_wide %>% filter(source == "sampling"))$ser_cou_code))
+cat(sprintf("Total number of countries in other sampling: %d (%s)\n", sampling_countries_n, sprintf("%s", paste(sampling_countries, collapse = ", "))))
+cat("\n")
+
+#total number of other sampling
+sampling_emus <- unique((individual_wide %>% filter(source == "sampling"))$ser_emu_nameshort)
+sampling_emus_n <- length(unique((individual_wide %>% filter(source == "sampling"))$ser_emu_nameshort))
+cat(sprintf("Total number of EMUs in other sampling: %d (%s)\n", sampling_emus_n, sprintf("%s", paste(sampling_emus, collapse = ", "))))
+cat("\n")
+
+# 2.3 Data from EU sampling ####
+
+# DCF Data
+DCF_only <- individual_wide %>% filter(sai_samplingobjective == "EU DCF" | sai_samplingobjective == "DCF" | sai_samplingobjective == "EU_DCF" | sai_samplingobjective == "EU DCF and UK (NI) Govt funded")
+DCF_only_n <- nrow(DCF_only)
+cat("Total number eels explicitly reported as at least partly derived from DCF: ", DCF_only_n, " (", round((DCF_only_n/total_individuals_n)*100, 1), "%", " of total", ")", sep = "", "\n")
+cat("\n")
+
+# EMP data
+EMP_only <- individual_wide %>% filter(sai_samplingobjective == "GaliciaEMP" | sai_samplingobjective == "CatalanEMP" | sai_samplingobjective == "AndaluciaEMP" | sai_samplingobjective == "MurciaEMP")
+EMP_only_n <- nrow(EMP_only)
+cat("Total number eels reported as sampled within EMPs: ", EMP_only_n, " (", round((EMP_only_n/total_individuals_n)*100, 1), "%", " of total", ")", sep = "", "\n")
+cat("\n")
+
+# 2.4 Individuals with ominous length
+
+# eels less than 151mm (OSD & TSD)
+length_150minus_n <- nrow(individual_all %>% filter(lengthmm < 151 & (lfs_code == "Y" | lfs_code == "S")))
+cat("Total number eels reported with length less 150mm: ", length_150minus_n, sep = "", "\n")
+cat("\n")
+
+# eels in series with length less 151mm (TSD)
+series_length_150minus_n <- nrow(individual_all %>% filter(source == "series") %>% filter(lengthmm < 151 & (lfs_code == "Y" | lfs_code == "S")))
+cat("Total number eels reported with length less 150mm in TSD: ", series_length_150minus_n, sep = "", "\n")
+cat("\n")
+
+# eels in series with length less 151mm (OSD)
+sampling_length_150minus_n <- nrow(individual_all %>% filter(source == "sampling") %>% filter(lengthmm < 151 & (lfs_code == "Y" | lfs_code == "S")))
+cat("Total number eels reported with length less 100mm in OSD: ", sampling_length_150minus_n, sep = "", "\n")
+cat("\n")
+
+```
+## Male/Female Proportions
+
+```{r male/female proportions, echo=FALSE, warning = FALSE, message = FALSE}
+
+#number of silver females smaller than 451mm visually determined (and bigger 150mm to remove erroneous entries)
+n_females_45minus <- individual_all %>%
+  filter(method_sex == 1, female_proportion == 1, lengthmm < 451, lengthmm > 150, lfs_code == "S") %>%
+  summarise(n_females = n()) %>% 
+  pull(n_females)
+
+#number of silver males smaller than 451mm visually determined (and bigger 150mm to remove erroneous entries)
+n_males_45minus <- individual_all %>%
+  filter(method_sex == 1, female_proportion == 0, lengthmm < 451, lengthmm > 150, lfs_code == "S") %>%
+  summarise(n_females = n()) %>% 
+  pull(n_females)
+
+#number of silver females larger than 451mm visually determined (and bigger 150mm to remove erroneous entries)
+n_females_45plus <- individual_all %>%
+  filter(method_sex == 1, female_proportion == 1, lengthmm > 450, lengthmm > 150, lfs_code == "S") %>%
+  summarise(n_females = n()) %>% 
+  pull(n_females)
+
+#number of silver males smaller than 451mm visually determined (and bigger 150mm to remove erroneous entries)
+n_males_45plus <- individual_all %>%
+  filter(method_sex == 1, female_proportion == 0, lengthmm > 450, lengthmm > 150, lfs_code == "S") %>%
+  summarise(n_females = n()) %>% 
+  pull(n_females)
+
+#number of all females larger than 451mm visually determined (and bigger 150mm to remove erroneous entries)
+n_allfemales_45plus <- individual_all %>%
+  filter(method_sex == 1, female_proportion == 1, lengthmm > 450, lengthmm > 150) %>%
+  summarise(n_females = n()) %>% 
+  pull(n_females)
+
+#number of all females larger than 451mm visually determined (and bigger 150mm to remove erroneous entries)
+n_allmales_45plus <- individual_all %>%
+  filter(method_sex == 1, female_proportion == 0, lengthmm > 450, lengthmm > 150) %>%
+  summarise(n_females = n()) %>% 
+  pull(n_females)
+
+
+
+#number of all females smaller than 451mm visually determined (and bigger 150mm to remove erroneous entries)
+n_yellowmales_45minus <- individual_all %>%
+  filter(method_sex == 1, female_proportion == 0, lengthmm < 451, lengthmm > 150, lfs_code == "Y") %>%
+  summarise(n_females = n()) %>% 
+  pull(n_females)
+
+#percentages to print
+prop_male_in_45minus <- n_males_45minus/(n_males_45minus+n_females_45minus)
+cat(paste("Proportion of silver males in all silver eels <= 45cm: ", round(prop_male_in_45minus*100, 1), "%", sep = ""), "\n")
+cat("\n")
+
+prop_allmales_45minus <- n_males_45minus/(n_males_45minus+n_males_45plus)
+cat(paste("Proportion of silver males <= 45cm in all silver males: ", round(prop_allmales_45minus*100, 1), "%", sep = ""), "\n")
+cat("\n")
+
+prop_female_in_45plus <- n_females_45plus/(n_males_45plus+n_females_45plus)
+cat(paste("Proportion of silver females in all silver eels > 45cm: ", round(prop_female_in_45plus*100, 1), "%", sep = ""), "\n")
+cat("\n")
+
+prop_allfemales_45plus <- n_females_45plus/(n_females_45minus+n_females_45plus)
+cat(paste("Proportion of silver females > 45cm in all silver females: ", round(prop_allfemales_45plus*100, 1), "%", sep = ""), "\n")
+cat("\n")
+
+prop_females_45plus_all <- n_allfemales_45plus/(n_allfemales_45plus+n_allmales_45plus)
+cat(paste("Proportion of females in all eels > 45cm: ", round(prop_females_45plus_all*100, 1), "%", sep = ""), "\n")
+cat("\n")
+
+cat("Number of male silver eels below 45cm: ", n_males_45minus, "\n") 
+cat("Number of male yellow eels below 45cm: ", n_yellowmales_45minus, "\n") 
+
+
+```
+
+## Inventory
+
+### By Site
+
+```{r inventory by site, echo=FALSE, warning = FALSE, message = FALSE}
+
+
+site_year <- individual_all %>% 
+  filter(source == "series") %>% 
+  group_by(ser_nameshort, fi_year) %>%
+  summarise(growth_count = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year), na.rm = TRUE),
+            growth_count_f = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year) & sex == "f", na.rm = TRUE),
+            growth_count_m = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year) & sex == "m", na.rm = TRUE),
+            silver_count = sum(lengthmm > 100 & !is.na(year) & lfs_code == "S", na.rm = TRUE),
+            silver_count_f = sum(lengthmm > 100 & !is.na(year) & lfs_code == "S" & sex == "f", na.rm = TRUE),
+            silver_count_m = sum(lengthmm > 100 & !is.na(year) & lfs_code == "S" & sex == "m", na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  group_by(ser_nameshort) %>% 
+  summarise(no_years_growth = length(unique(fi_year[which(growth_count > 0)])),
+            no_years_growth_f = length(unique(fi_year[which(growth_count_f > 0)])),
+            no_years_growth_m = length(unique(fi_year[which(growth_count_m > 0)])),
+            no_years_silver = length(unique(fi_year[which(silver_count > 0)])),
+            no_years_silver_f = length(unique(fi_year[which(silver_count_f > 0)])),
+            no_years_silver_m = length(unique(fi_year[which(silver_count_m > 0)])))
+    
+    
+inventory_site <- individual_all %>%
+  filter(source == "series") %>% 
+  group_by(ser_nameshort) %>% 
+  summarise(n = length(mei_fi_id),
+            sex_count = sum(!is.na(sex)),
+            sex_f = sum(sex == "f", na.rm = TRUE),
+            sex_m = sum(sex == "m", na.rm = TRUE),
+            stage_count = sum(!is.na(lfs_code)),
+            stage_f = sum(!is.na(lfs_code) & sex == "f", na.rm = TRUE),
+            stage_m = sum(!is.na(lfs_code) & sex == "m", na.rm = TRUE),
+            length_count = sum(!is.na(lengthmm) & lengthmm > 100),
+            length_f = sum(!is.na(lengthmm) & lengthmm > 100 & sex == "f", na.rm = TRUE),
+            length_m = sum(!is.na(lengthmm) & lengthmm > 100 & sex == "m", na.rm = TRUE),
+            age_count = sum(!is.na(ageyear)),
+            age_f = sum(!is.na(ageyear) & sex == "f", na.rm = TRUE),
+            age_m = sum(!is.na(ageyear) & sex == "m", na.rm = TRUE),
+            year_f = sum(!is.na(fi_year) & sex == "f", na.rm = TRUE),
+            year_m = sum(!is.na(fi_year) & sex == "m", na.rm = TRUE),
+            no_years = sum(!is.na(unique(fi_year))),
+            min_year = min(fi_year, na.rm = TRUE),
+            max_year = ifelse(min_year == "Inf", NA, min_year),
+            max_year = max(fi_year, na.rm = TRUE),
+            max_year = ifelse(max_year == "-Inf", NA, max_year),
+            growth_count = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year), na.rm = TRUE),
+            growth_f = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year) & sex == "f", na.rm = TRUE),
+            growth_m = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year) & sex == "m", na.rm = TRUE),
+            silver_count = sum(lengthmm > 100 & !is.na(year) & lfs_code == "S", na.rm = TRUE),
+            silver_f = sum(lengthmm > 100 & !is.na(fi_year) & lfs_code == "S" & sex == "f", na.rm = TRUE),
+            silver_m = sum(lengthmm > 100 & !is.na(fi_year) & lfs_code == "S" & sex == "m", na.rm = TRUE),
+            long = max(ser_x),
+            lat = max(ser_y)) %>%
+  arrange(ser_nameshort) %>% 
+  left_join(site_year, by = "ser_nameshort") %>% 
+  bind_rows(summarise(., across(where(is.numeric), sum, na.rm = TRUE)) %>%
+              mutate(ser_nameshort = "Total", .before = 1))
+              
+                                            
+site_table <- inventory_site %>%
+  mutate("Series Name" = ser_nameshort,
+         "No of Individuals (total)" = n,
+         "Sex (f/m)" = paste(sex_count, " (", sex_f, "/", sex_m, ")", sep = ""),
+         "Life Stage (f/m)" = paste(stage_count, " (", stage_f, "/", stage_m, ")", sep = ""),
+         "Length (f/m)" = paste(length_count, " (", length_f, "/", length_m, ")", sep = ""),
+         "Age (f/m)" = paste(age_count, " (", age_f, "/", age_m, ")", sep = ""),
+         "No of years (total/growth/maturity)" = paste(no_years, "/", no_years_growth, "/", no_years_silver, sep = ""), 
+         "Temporal coverage" = paste(min_year, "-", max_year, sep = ""),
+         "Suitable for growth analyses" = paste(growth_count, " (", growth_f, "/", growth_m, ")", sep = ""),
+         "Suitable for length-at-maturation analyses" = paste(silver_count, " (", silver_f, "/", silver_m, ")", sep = "")) %>% 
+  select(-colnames(inventory_site))
+
+flextable(site_table) %>% set_table_properties(layout = "autofit")
+```
+\n
+\n
+### by EMU
+\n
+```{r inventory by emu, echo=FALSE, warning = FALSE, message = FALSE}
+
+emu_year <- individual_all %>% 
+  group_by(ser_emu_nameshort, fi_year) %>%
+  summarise(growth_count = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year), na.rm = TRUE),
+            growth_count_f = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year) & sex == "f", na.rm = TRUE),
+            growth_count_m = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year) & sex == "m", na.rm = TRUE),
+            silver_count = sum(lengthmm > 100 & !is.na(year) & lfs_code == "S", na.rm = TRUE),
+            silver_count_f = sum(lengthmm > 100 & !is.na(year) & lfs_code == "S" & sex == "f", na.rm = TRUE),
+            silver_count_m = sum(lengthmm > 100 & !is.na(year) & lfs_code == "S" & sex == "m", na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  group_by(ser_emu_nameshort) %>% 
+  summarise(no_years_growth = length(unique(fi_year[which(growth_count > 0)])),
+            no_years_growth_f = length(unique(fi_year[which(growth_count_f > 0)])),
+            no_years_growth_m = length(unique(fi_year[which(growth_count_m > 0)])),
+            no_years_silver = length(unique(fi_year[which(silver_count > 0)])),
+            no_years_silver_f = length(unique(fi_year[which(silver_count_f > 0)])),
+            no_years_silver_m = length(unique(fi_year[which(silver_count_m > 0)])))
+
+inventory_emu <- individual_all %>%
+  group_by(ser_emu_nameshort) %>% 
+  summarise(n = length(mei_fi_id),
+            sex_count = sum(!is.na(sex)),
+            sex_f = sum(sex == "f", na.rm = TRUE),
+            sex_m = sum(sex == "m", na.rm = TRUE),
+            stage_count = sum(!is.na(lfs_code)),
+            stage_f = sum(!is.na(lfs_code) & sex == "f", na.rm = TRUE),
+            stage_m = sum(!is.na(lfs_code) & sex == "m", na.rm = TRUE),
+            length_count = sum(!is.na(lengthmm) & lengthmm > 100),
+            length_f = sum(!is.na(lengthmm) & lengthmm > 100 & sex == "f", na.rm = TRUE),
+            length_m = sum(!is.na(lengthmm) & lengthmm > 100 & sex == "m", na.rm = TRUE),
+            age_count = sum(!is.na(ageyear)),
+            age_f = sum(!is.na(ageyear) & sex == "f", na.rm = TRUE),
+            age_m = sum(!is.na(ageyear) & sex == "m", na.rm = TRUE),
+            year_f = sum(!is.na(fi_year) & sex == "f", na.rm = TRUE),
+            year_m = sum(!is.na(fi_year) & sex == "m", na.rm = TRUE),
+            no_years = sum(!is.na(unique(fi_year))),
+            min_year = min(fi_year, na.rm = TRUE),
+            min_year = ifelse(min_year == "Inf", NA, min_year),
+            max_year = max(fi_year, na.rm = TRUE),
+            max_year = ifelse(max_year == "-Inf", NA, max_year),
+            growth_count = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year), na.rm = TRUE),
+            growth_f = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year) & sex == "f", na.rm = TRUE),
+            growth_m = sum(lfs_code == "Y" & lengthmm > 100 & !is.na(ageyear) & !is.na(fi_year) & sex == "m", na.rm = TRUE),
+            silver_count = sum(lengthmm > 100 & !is.na(year) & lfs_code == "S", na.rm = TRUE),
+            silver_f = sum(lengthmm > 100 & !is.na(fi_year) & lfs_code == "S" & sex == "f", na.rm = TRUE),
+            silver_m = sum(lengthmm > 100 & !is.na(fi_year) & lfs_code == "S" & sex == "m", na.rm = TRUE)) %>%
+  arrange(ser_emu_nameshort) %>% 
+  left_join(emu_year, by = "ser_emu_nameshort") %>% 
+  bind_rows(summarise(., across(where(is.numeric), sum, na.rm = TRUE)) %>%
+              mutate(ser_emu_nameshort = "Total", .before = 1))
+              
+                                            
+emu_table <- inventory_emu %>%
+  mutate("EMU" = ser_emu_nameshort,
+         "No of Individuals (total)" = n,
+         "Sex (f/m)" = paste(sex_count, " (", sex_f, "/", sex_m, ")", sep = ""),
+         "Life Stage (f/m)" = paste(stage_count, " (", stage_f, "/", stage_m, ")", sep = ""),
+         "Length (f/m)" = paste(length_count, " (", length_f, "/", length_m, ")", sep = ""),
+         "Age (f/m)" = paste(age_count, " (", age_f, "/", age_m, ")", sep = ""),
+         "No of years (total/growth/maturity)" = paste(no_years, "/", no_years_growth, "/", no_years_silver, sep = ""),
+         "Temporal coverage" = paste(min_year, "-", max_year, sep = ""),
+         "Suitable for growth analyses" = paste(growth_count, " (", growth_f, "/", growth_m, ")", sep = ""),
+         "Suitable for length-at-maturation analyses" = paste(silver_count, " (", silver_f, "/", silver_m, ")", sep = "")) %>% 
+  select(-colnames(inventory_emu))
+
+flextable(emu_table) %>% set_table_properties(layout = "autofit")
+```
+
+## Maps
+
+### Growth by site
+
+```{r growth by site, echo=FALSE, warning = FALSE, message = FALSE, , dpi=300}
+
+# Create map for males
+map_site_growth_f <- map_basic +
+  geom_point(
+    data = subset(inventory_site, growth_f > 0 & ser_nameshort != "Total"),
+    aes(x = long, y = lat, size = growth_f, color = no_years_growth_f),
+    alpha = 0.65
+  ) + 
+  scale_color_viridis_c(option = "D", name = "No of years") +  
+  scale_size_continuous(name = "No of individuals (f)") + 
+  theme(axis.title = element_blank())  # Remove axis titles
+
+# Create map for females 
+map_site_growth_m <- map_basic +
+  geom_point(
+    data = subset(inventory_site, growth_m > 0 & ser_nameshort != "Total"),
+    aes(x = long, y = lat, size = growth_m, color = no_years_growth_m),
+    alpha = 0.65
+  ) + 
+  scale_color_viridis_c(option = "D", name = "No of years") +  
+  scale_size_continuous(name = "No of individuals (m)") + 
+  theme(axis.title = element_blank())  # Remove axis titles
+
+map_site_growth_f
+map_site_growth_m
+
+```
+###Silvering by site
+
+```{r silver by site, echo=FALSE, warning = FALSE, message = FALSE, dpi=300}
+
+# Create map for males
+map_site_silver_f <- map_basic +
+  geom_point(
+    data = subset(inventory_site, silver_f > 0 & ser_nameshort != "Total"),
+    aes(x = long, y = lat, size = silver_f, color = no_years_silver_f),
+    alpha = 0.65
+  ) + 
+  scale_color_viridis_c(option = "D", name = "No of years") +  
+  scale_size_continuous(name = "No of individuals (f)") + 
+  theme(axis.title = element_blank())  # Remove axis titles
+
+# Create map for females 
+map_site_silver_m <- map_basic +
+  geom_point(
+    data = subset(inventory_site, silver_m > 0 & ser_nameshort != "Total"),
+    aes(x = long, y = lat, size = silver_m, color = no_years_silver_m),
+    alpha = 0.65
+  ) + 
+  scale_color_viridis_c(option = "D", name = "No of years") +  
+  scale_size_continuous(name = "No of individuals (m)") + 
+  theme(axis.title = element_blank())  # Remove axis titles
+
+map_site_silver_f
+map_site_silver_m
+
+```
+
+###growth by emu
+
+```{r growth by EMU, echo=FALSE, warning = FALSE, message = FALSE, dpi=300}
+
+#join data with shapefile
+inventory_emu_sf <- EMUs %>% left_join(inventory_emu, by = c("emu_namesh" = "ser_emu_nameshort"))
+
+# Create map with no of individuals for growth analyses for females
+map_emu_growth_ind_f <- map_basic +
+  geom_sf(data = subset(inventory_emu_sf, growth_f > 0 & emu_namesh != "Total"), aes(fill = growth_f), color = "black", size = 0.25) +
+  scale_fill_viridis_c(option = "D", name = NULL) + 
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+  theme_minimal() +
+  theme(plot.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.14, 0.8),  # Place legend in top-left (x=0.1, y=0.9)
+        legend.background = element_rect(fill = "white", color = "black", size = 0.25))
+
+# Create map with no of individuals for growth analyses for males
+map_emu_growth_ind_m <- map_basic +
+  geom_sf(data = subset(inventory_emu_sf, growth_m > 0 & emu_namesh != "Total"), aes(fill = growth_m), color = "black", size = 0.25) +
+  scale_fill_viridis_c(option = "D", name = NULL) + 
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+  theme_minimal() +
+  theme(plot.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.14, 0.8),  # Place legend in top-left (x=0.1, y=0.9)
+        legend.background = element_rect(fill = "white", color = "black", size = 0.25))
+
+# Create map with no of years for growth analyses for females
+map_emu_growth_y_f <- map_basic +
+  geom_sf(data = subset(inventory_emu_sf, growth_f > 0 & emu_namesh != "Total"), aes(fill = no_years_growth_f), color = "black", size = 0.25) +
+  scale_fill_viridis_c(option = "D", name = NULL) + 
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+  theme_minimal() +
+  theme(plot.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.14, 0.8),  # Place legend in top-left (x=0.1, y=0.9)
+        legend.background = element_rect(fill = "white", color = "black", size = 0.25))
+
+# Create map with no of years for growth analyses for males
+map_emu_growth_y_m <- map_basic +
+  geom_sf(data = subset(inventory_emu_sf, growth_m > 0 & emu_namesh != "Total"), aes(fill = no_years_growth_m), color = "black", size = 0.25) +
+  scale_fill_viridis_c(option = "D", name = NULL) + 
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+  theme_minimal() +
+  theme(plot.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.14, 0.8),  # Place legend in top-left (x=0.1, y=0.9)
+        legend.background = element_rect(fill = "white", color = "black", size = 0.25))
+
+
+
+
+map_emu_growth_ind_f
+map_emu_growth_ind_m
+
+map_emu_growth_y_f
+map_emu_growth_y_m
+
+```
+###silvering by EMU
+
+```{r silvering by EMU, echo=FALSE, warning = FALSE, message = FALSE, dpi=300}
+
+#create map with no of individuals for silver analyses for males
+map_emu_silver_ind_f <- map_basic +
+  geom_sf(data = subset(inventory_emu_sf, silver_f > 0 & emu_namesh != "Total"), aes(fill = silver_f), color = "black", size = 0.25)+
+  scale_fill_viridis_c(option = "D", name = NULL) + 
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.14, 0.8),  # Place legend in top-left (x=0.1, y=0.9)
+        legend.background = element_rect(fill = "white", color = "black", size = 0.25))
+
+#create map with no of individuals for silver analyses for females
+map_emu_silver_ind_m <- map_basic +
+  geom_sf(data = subset(inventory_emu_sf, silver_m > 0 & emu_namesh != "Total"), aes(fill = silver_m), color = "black", size = 0.25)+
+  scale_fill_viridis_c(option = "D", name = NULL) + 
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.14, 0.8),  # Place legend in top-left (x=0.1, y=0.9)
+        legend.background = element_rect(fill = "white", color = "black", size = 0.25))
+
+#create map with no of individuals for silver analyses for males
+map_emu_silver_y_f <- map_basic +
+  geom_sf(data = subset(inventory_emu_sf, silver_f > 0 & emu_namesh != "Total"), aes(fill = no_years_silver_f), color = "black", size = 0.25)+
+  scale_fill_viridis_c(option = "D", name = NULL) + 
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.14, 0.8),  # Place legend in top-left (x=0.1, y=0.9)
+        legend.background = element_rect(fill = "white", color = "black", size = 0.25))
+
+#create map with no of individuals for silver analyses for females
+map_emu_silver_y_m <- map_basic +
+  geom_sf(data = subset(inventory_emu_sf, silver_m > 0 & emu_namesh != "Total"), aes(fill = no_years_silver_m), color = "black", size = 0.25)+
+  scale_fill_viridis_c(option = "D", name = NULL) + 
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.14, 0.8),  # Place legend in top-left (x=0.1, y=0.9)
+        legend.background = element_rect(fill = "white", color = "black", size = 0.25))
+
+
+
+
+map_emu_silver_ind_f
+map_emu_silver_ind_m
+
+map_emu_silver_y_f
+map_emu_silver_y_m
+
+```

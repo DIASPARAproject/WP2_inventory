@@ -1,0 +1,568 @@
+---
+title: 'DIASPARA WP2 EEL'
+author: 'Jan-Dag Pohlmann'
+date: '02-04-2025'
+output: 
+  html_document: 
+    css: style.css
+  word_document: default
+  pdf_document: default
+---
+
+```{r Initial preparations, echo=FALSE, warning = FALSE, message = FALSE}
+
+# LOAD LIBRARIES #########################################
+
+### define libraries needed 
+libs <- c("icesTAF", "tidyverse", "ggplot2", "flextable", "sf", "ggspatial") 
+
+### define libraries already installed
+installed_libs <- libs %in% rownames(installed.packages())
+
+### install libraries that are not installed already
+if (any(installed_libs == F)) {
+  install.packages(libs[!installed_libs])
+}
+
+### load libraries needed
+invisible(lapply(libs, library, character.only = T))
+
+
+# LOAD DATA #########################################
+
+#delete everything from the R environment
+rm(list = ls())
+
+#load data list
+load("data/LHTsite/summary_site_spatiotemp.RData")
+load("data/LHTsite/summary_site_spatial.RData")
+load("data/LHTemu/summary_emu_spatiotemp_sf.RData")
+load("data/LHTemu/summary_emu_spatial_sf.RData")
+
+#load shapefile of EMUs
+EMUs <- read_sf("utility/emu_shapefile/emu.shp")
+
+# CREATE DIRECTORIES #########################################
+mkdir("output/overview/maps/")
+
+
+# CREATE BASIC MAP TEMPLATE & COLOR SCHEME ################################
+
+#map
+map_basic <- ggplot() +
+  geom_sf(data = EMUs, color = "black")+
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+#define fixed colours
+quality_colors <- (c("1" = "darkgreen", "2" = "orange", "3" = "red3", na.value = "grey"))
+
+```
+
+## To do
+* Correct lengths <100 in "compilation" if data is available
+* Use eels where sex_method is NA? Only if sex determination confirmed visual?
+* Use HR sex determination if confirmed visual
+* Ask providers for corrections (mm is cm for approx. 1/4th of data I suspect)
+* Fit bertalanffy for growth dataset
+* Fit GLM(M?) for silver length/kLinf/transition & add prediction per year & emu/site
+* Where numbers are used for filtering define an object at the top to ease changes and replace the number with it
+* consider analyses to determine thresholds for no of eel based on available data
+* remove fish with no length at the start
+* some cells contain "NA" as character. Change that to NA
+* check for percentage of eels that are not the same as series stage
+
+\
+\
+\
+
+## Issues:
+* Add check for duplicates in report for wide dataset (none as is, but as a failsafe)
+* Many YS from FR have no length… but weight… transform? This may help increase no of eels with sex
+* Many eels from SE have no "method_sex", do we use them? Confirm this is visual.
+* Some eels from HR have method_sex by length but they are yellow and < 450mm… I don't trust that. Confirm if this is a mistake (visual?)
+* Roughly 1/2 of data is from last 10 years (not an issue, just a remark)
+* age is one of the big issues - only available for 42449 (of 666846 > 99mm; incl. 11543 lengthmm = NA - just realize, they can go from the start) 
+* the other issue is many small yellow eels, so sex can only be determined for 229495. A total of 314213 are smaller than 451mm and not silver; another 120960 that are smaller than 451mm have no stage at all (from "FR" "GB" "NO" "ES"),  and 2178 have no length.
+* 13610 eels have a method_sex but no sex?
+* 698 eels have no method but sex?
+* 275 eels are < 451mm and not silver by SI; yet classified as male by method_sex = length (probably stage taken from series...) 
+
+
+# General introduction
+
+Data were compiled to check their suitability for spatiotemporal analyses of life history traits (LHTs). Data were aggregated on both the site and EMU level, for the former only datasets that were reported as "series" to WGEEL were considered. Before data were aggregated SI was calculated where relevant data was available, subsequently a single column for life stage defined as follows: \
+\
+*Life stage* \
+
+* S1, S2, S3 = Y
+* S4, S5, S6 = S
+* where SI was not available fi_lfs_code was used
+\
+
+Sex was determined by the following priorization: \
+
+* visual (from provider) > SI > length/stage > length/stage (from provider). \ 
+* Note that some eels the sex was marked as "potential" unless visual determination was available (pot_m/pot_f; e.g. length 450 - 500 mm -> pot_f, length < 451mm & stage = "S" -> pot_m). Anyway, all potential males/females were fully included. \
+
+\
+For potential spatial-only analyses data from 2013 - 2023 were pooled. All eels smaller 100mm were removed from the dataset since they are either glasseel or reported wrong (likely cm instead of mm).
+\
+The following criteria were used for data selection: \
+\
+
+*Growth* \
+
+
+* stage = "Y"
+* age & length available
+* sex known
+* time series: quality 1 = At least 15 years & avg. 10  eels/year, quality 2 = At least 10 years & avg. 10 eel/year, quality 3 = all others where eels are available
+* spatial-only: quality 1 = At least 30  eels, quality 2 = At least 10 eels, quality 3 = all others where eels are available \
+\
+
+*stage transition* \
+
+* stage Y and silver are available at a site/EMU with known length
+* sex known
+* time series: quality 1 = At least 15 years & avg. 10  eels/year, quality 2 = At least 10 years & avg. 10 eel/year, quality 3 = all others where eels are available (at least three of each must be available for a combination of year EMU/site to considered)
+* spatial: quality 1 = At least 30  eels per stage, quality 2 = At least 10 eels per stage, quality 3 = all others where eels are available \
+\
+
+*silver eel length* \
+
+* stage = "S"
+* length known
+* sex known
+* time series: quality 1 = At least 15 years & avg. 10  eels/year, quality 2 = At least 10 years & avg. 10 eel/year, quality 3 = all others where eels are available
+* spatial-only: quality 1 = At least 30  eels, quality 2 = At least 10 eels, quality 3 = all others where eels are available \
+\
+
+All sites/EMUs are displayed, where no fish relevant to the analyses were present it is displayed as NA. The thresholds for no of years & individuals are arbitrary for now and need to be further refined; consider analyses from the available data.
+\
+\
+\
+
+# 1. Site specific data
+
+## 1.1 Growth
+```{r overview map of available site data (growth, spatiotemporal), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of time series for growth analyses for females
+map_site_growth_spatiotemp_f <- map_basic +
+  geom_point(data = summary_site_spatiotemp %>% mutate(quality_growth_spatiotemp_f = as.character(quality_growth_spatiotemp_f)), aes(x = ser_x, y = ser_y, color = quality_growth_spatiotemp_f), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#create map with quality of time series for growth analyses for males
+map_site_growth_spatiotemp_m <- map_basic +
+  geom_point(data = summary_site_spatiotemp %>% mutate(quality_growth_spatiotemp_m = as.character(quality_growth_spatiotemp_m)), aes(x = ser_x, y = ser_y, color = quality_growth_spatiotemp_m), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#print map
+map_site_growth_spatiotemp_f
+map_site_growth_spatiotemp_m
+
+#save as png
+ggsave("map_site_growth_spatiotemp_f.png", map_site_growth_spatiotemp_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_site_growth_spatiotemp_m.png", map_site_growth_spatiotemp_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600)
+
+
+```
+\
+**Fig 1a**: Quality of available site-specific datasets of growth for spatiotemporal analyses. Top: Females, Bottom: Males.  
+\
+\
+\
+
+```{r overview map of available site data (growth, spatial), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of data for growth analyses for females
+map_site_growth_spatial_f <- map_basic +
+  geom_point(data = summary_site_spatial %>% mutate(quality_growth_spatial_f = as.character(quality_growth_spatial_f)), aes(x = ser_x, y = ser_y, color = quality_growth_spatial_f), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#create map with quality of data for growth analyses for males
+map_site_growth_spatial_m <- map_basic +
+  geom_point(data = summary_site_spatial %>% mutate(quality_growth_spatial_m = as.character(quality_growth_spatial_m)), aes(x = ser_x, y = ser_y, color = quality_growth_spatial_m), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#print map
+map_site_growth_spatial_f
+map_site_growth_spatial_m
+
+#save as png
+ggsave("map_site_growth_spatial_f.png", map_site_growth_spatial_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_site_growth_spatial_m.png", map_site_growth_spatial_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600)
+
+
+```
+\
+**Fig 1b**: Quality of available site-specific datasets of growth for spatial-only analyses. Top: Females, Bottom: Males. Data pooled for the years 2013-2023.  
+\
+\
+\
+
+## 1.2 Stage transition 
+```{r overview map of available site data (transition, spatiotemporal), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of time series for transition analyses for females
+map_site_transition_spatiotemp_f <- map_basic +
+  geom_point(data = summary_site_spatiotemp %>%  mutate(quality_transition_spatiotemp_f = as.character(quality_transition_spatiotemp_f)), aes(x = ser_x, y = ser_y, color = quality_transition_spatiotemp_f), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#create map with quality of time series for transition analyses for males
+map_site_transition_spatiotemp_m <- map_basic +
+  geom_point(data = summary_site_spatiotemp %>%  mutate(quality_transition_spatiotemp_m = as.character(quality_transition_spatiotemp_m)), aes(x = ser_x, y = ser_y, color = quality_transition_spatiotemp_m), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#print map
+map_site_transition_spatiotemp_f
+map_site_transition_spatiotemp_m
+
+#save as png
+ggsave("map_site_transition_spatiotemp_f.png", map_site_transition_spatiotemp_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_site_transition_spatiotemp_m.png", map_site_transition_spatiotemp_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600)
+
+```
+\
+**Fig 2a**: Quality of available site-specific datasets of stage transition for spatiotemporal analyses. Top: Females, Bottom: Males. 
+\
+\
+\
+
+```{r overview map of available site data (transition, spatial), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of data for females
+map_site_transition_spatial_f <- map_basic +
+  geom_point(data = summary_site_spatial %>%  mutate(quality_transition_spatial_f = as.character(quality_transition_spatial_f)), aes(x = ser_x, y = ser_y, color = quality_transition_spatial_f), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#create map with quality of data for males
+map_site_transition_spatial_m <- map_basic +
+  geom_point(data = summary_site_spatial %>%  mutate(quality_transition_spatial_m = as.character(quality_transition_spatial_m)), aes(x = ser_x, y = ser_y, color = quality_transition_spatial_m), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#print map
+map_site_transition_spatial_f
+map_site_transition_spatial_m
+
+#save as png
+ggsave("map_site_transition_spatial_f.png", map_site_transition_spatial_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_site_transition_spatial_m.png", map_site_transition_spatial_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600)
+
+```
+\
+**Fig 2b**: Quality of available site-specific datasets of stage transition for spatial-only analyses. Top: Females, Bottom: Males. Data pooled for the years 2013-2023.  
+\
+\
+\
+
+### 1.3 Silver eel length 
+```{r overview map of available site data (silverlength length, spatiotemporal), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of time series for transition analyses for females
+map_site_silverlength_spatiotemp_f <- map_basic +
+  geom_point(data = summary_site_spatiotemp %>%  mutate(quality_silverlength_spatiotemp_f = as.character(quality_silverlength_spatiotemp_f)), aes(x = ser_x, y = ser_y, color = quality_silverlength_spatiotemp_f), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#create map with quality of time series for transition analyses for males
+map_site_silverlength_spatiotemp_m <- map_basic +
+  geom_point(data = summary_site_spatiotemp %>%  mutate(quality_silverlength_spatiotemp_m = as.character(quality_silverlength_spatiotemp_m)), aes(x = ser_x, y = ser_y, color = quality_silverlength_spatiotemp_m), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#print map
+map_site_silverlength_spatiotemp_f
+map_site_silverlength_spatiotemp_m
+
+#save as png
+ggsave("map_site_silverlength_spatiotemp_f.png", map_site_silverlength_spatiotemp_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_site_silverlength_spatiotemp_m", map_site_silverlength_spatiotemp_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600)
+
+```
+\
+**Fig 3a**: Quality of available site-specific datasets of silver length for spatiotemporal analyses. Top: Females, Bottom: Males. 
+\
+\
+\
+
+```{r overview map of available site data (silverlength length, spatial), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of data for transition analyses for females
+map_site_silverlength_spatial_f <- map_basic +
+  geom_point(data = summary_site_spatial %>%  mutate(quality_silverlength_spatial_f = as.character(quality_silverlength_spatial_f)), aes(x = ser_x, y = ser_y, color = quality_silverlength_spatial_f), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#create map with quality of data for transition analyses for females
+map_site_silverlength_spatial_m <- map_basic +
+  geom_point(data = summary_site_spatial %>%  mutate(quality_silverlength_spatial_m = as.character(quality_silverlength_spatial_m)), aes(x = ser_x, y = ser_y, color = quality_silverlength_spatial_m), alpha = 0.65, size = 2.5) + 
+  scale_color_manual(values = quality_colors)
+
+#print map
+map_site_silverlength_spatial_f
+map_site_silverlength_spatial_m
+
+#save as png
+ggsave("map_site_silverlength_spatial_f.png", map_site_silverlength_spatial_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_site_silverlength_spatial_m.png", map_site_silverlength_spatial_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600)
+
+```
+\
+**Fig 3b**: Quality of available site-specific datasets of silver length for spatiotemporal analyses. Top: Females, Bottom: Males. Data pooled for the years 2013-2023.
+\
+\
+\
+
+# 2. Pooled by EMU
+
+### 2.1 Growth
+```{r overview map of pooled EMU data (growth, spatiotemporal), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of data for growth analyses for females
+map_emu_growth_spatiotemp_f <- ggplot() +
+   geom_sf(data = summary_emu_spatiotemp_sf %>% mutate(quality_growth_spatiotemp_f = as.character(quality_growth_spatiotemp_f)), aes(fill = quality_growth_spatiotemp_f), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+#create map with quality of data for growth analyses for males
+map_emu_growth_spatiotemp_m <- ggplot() +
+   geom_sf(data = summary_emu_spatiotemp_sf %>% mutate(quality_growth_spatiotemp_m = as.character(quality_growth_spatiotemp_m)), aes(fill = quality_growth_spatiotemp_m), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+
+
+#print map
+map_emu_growth_spatiotemp_f
+map_emu_growth_spatiotemp_m
+
+#save as png
+ggsave("map_emu_growth_spatiotemp_f.png", map_emu_growth_spatiotemp_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_emu_growth_spatiotemp_m.png", map_emu_growth_spatiotemp_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+
+```
+\
+**Fig 4a**: Quality of available datasets of growth, pooled by EMU, for spatiotemporal analyses. Top: Females, Bottom: Males.  
+\
+\
+\
+
+```{r overview map of pooled EMU data (growth, spatial), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of data for growth analyses for females
+map_emu_growth_spatial_f <- ggplot() +
+   geom_sf(data = summary_emu_spatial_sf %>% mutate(quality_growth_spatial_f = as.character(quality_growth_spatial_f)), aes(fill = quality_growth_spatial_f), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+#create map with quality of data for growth analyses for males
+map_emu_growth_spatial_m <- ggplot() +
+   geom_sf(data = summary_emu_spatial_sf %>% mutate(quality_growth_spatial_m = as.character(quality_growth_spatial_m)), aes(fill = quality_growth_spatial_m), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+
+
+#print map
+map_emu_growth_spatial_f
+map_emu_growth_spatial_m
+
+#save as png
+ggsave("map_emu_growth_spatial_f.png", map_emu_growth_spatial_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_emu_growth_spatial_m.png", map_emu_growth_spatial_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+
+```
+\
+**Fig 4b**: Quality of available datasets of transition, pooled by EMU, for spatiotemporal analyses. Top: Females, Bottom: Males. Data pooled for the years 2013-2023.  
+\
+\
+\
+
+### 2.2 Stage transition
+```{r overview map of pooled EMU data (transition, spatiotemporal), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of data for transition analyses for females
+map_emu_transition_spatiotemp_f <- ggplot() +
+   geom_sf(data = summary_emu_spatiotemp_sf %>% mutate(quality_transition_spatiotemp_f = as.character(quality_transition_spatiotemp_f)), aes(fill = quality_transition_spatiotemp_f), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+#create map with quality of data for transition analyses for males
+map_emu_transition_spatiotemp_m <- ggplot() +
+   geom_sf(data = summary_emu_spatiotemp_sf %>% mutate(quality_transition_spatiotemp_m = as.character(quality_transition_spatiotemp_m)), aes(fill = quality_transition_spatiotemp_m), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+
+
+#print map
+map_emu_transition_spatiotemp_f
+map_emu_transition_spatiotemp_m
+
+#save as png
+ggsave("map_emu_transition_spatiotemp_f.png", map_emu_transition_spatiotemp_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_emu_transition_spatiotemp_m.png", map_emu_transition_spatiotemp_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+
+```
+\
+**Fig 5a**: Quality of available datasets of stage transition, pooled by EMU, for spatiotemporal analyses. Top: Females, Bottom: Males.  
+\
+\
+\
+
+```{r overview map of pooled EMU data (transition, spatial), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of data for transition analyses for females
+map_emu_transition_spatial_f <- ggplot() +
+   geom_sf(data = summary_emu_spatial_sf %>% mutate(quality_transition_spatial_f = as.character(quality_transition_spatial_f)), aes(fill = quality_transition_spatial_f), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+#create map with quality of data for transition analyses for males
+map_emu_transition_spatial_m <- ggplot() +
+   geom_sf(data = summary_emu_spatial_sf %>% mutate(quality_transition_spatial_m = as.character(quality_transition_spatial_m)), aes(fill = quality_transition_spatial_m), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+
+
+#print map
+map_emu_transition_spatial_f
+map_emu_transition_spatial_m
+
+#save as png
+ggsave("map_emu_transition_spatial_f.png", map_emu_transition_spatial_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_emu_transition_spatial_m.png", map_emu_transition_spatial_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+
+```
+\
+**Fig 5b**: Quality of available datasets of stage transition, pooled by EMU, for spatiotemporal analyses. Top: Females, Bottom: Males. Data pooled for the years 2013-2023.  
+\
+\
+\
+
+### 2.3 Silver eel length
+```{r overview map of pooled EMU data (silverlength, spatiotemporal), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of data for silverlength analyses for females
+map_emu_silverlength_spatiotemp_f <- ggplot() +
+   geom_sf(data = summary_emu_spatiotemp_sf %>% mutate(quality_silverlength_spatiotemp_f = as.character(quality_silverlength_spatiotemp_f)), aes(fill = quality_silverlength_spatiotemp_f), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+#create map with quality of data for silverlength analyses for males
+map_emu_silverlength_spatiotemp_m <- ggplot() +
+   geom_sf(data = summary_emu_spatiotemp_sf %>% mutate(quality_silverlength_spatiotemp_m = as.character(quality_silverlength_spatiotemp_m)), aes(fill = quality_silverlength_spatiotemp_m), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+
+
+#print map
+map_emu_silverlength_spatiotemp_f
+map_emu_silverlength_spatiotemp_m
+
+#save as png
+ggsave("map_emu_silverlength_spatiotemp_f.png", map_emu_silverlength_spatiotemp_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_emu_silverlength_spatiotemp_m.png", map_emu_silverlength_spatiotemp_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+
+```
+\
+**Fig 6a**: Quality of available datasets of silver length, pooled by EMU, for spatiotemporal analyses. Top: Females, Bottom: Males.  
+\
+\
+\
+
+```{r overview map of pooled EMU data (silverlength, spatial), echo=FALSE, warning = FALSE, message = FALSE}
+
+#create map with quality of data for silverlength analyses for females
+map_emu_silverlength_spatial_f <- ggplot() +
+   geom_sf(data = summary_emu_spatial_sf %>% mutate(quality_silverlength_spatial_f = as.character(quality_silverlength_spatial_f)), aes(fill = quality_silverlength_spatial_f), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+#create map with quality of data for silverlength analyses for males
+map_emu_silverlength_spatial_m <- ggplot() +
+   geom_sf(data = summary_emu_spatial_sf %>% mutate(quality_silverlength_spatial_m = as.character(quality_silverlength_spatial_m)), aes(fill = quality_silverlength_spatial_m), color = "black")+
+  scale_fill_manual(values = quality_colors) +
+  coord_sf(xlim = c(-22, 25), ylim = c(32, 65), expand = T) +
+    theme_minimal() +
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+
+
+
+#print map
+map_emu_silverlength_spatial_f
+map_emu_silverlength_spatial_m
+
+#save as png
+ggsave("map_emu_silverlength_spatial_f.png", map_emu_silverlength_spatial_f, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+ggsave("map_emu_silverlength_spatial_m.png", map_emu_silverlength_spatial_m, path = "./output/overview/maps/", width = 5, height = 4, device='png', dpi=600) 
+
+```
+\
+**Fig 6b**: Quality of available datasets of silver length, pooled by EMU, for spatiotemporal analyses. Top: Females, Bottom: Males. Data pooled for the years 2013-2023.  
+\
+\
+\

@@ -1,0 +1,15 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.RDATATmp
+credentials.yml
+/data
+/model
+/output
+/report
+/first_version
+/model
+output.html
+inventory.docx
+inventory_final_commented.docx
