@@ -4,12 +4,15 @@
 .Ruserdata
 .RDATATmp
 credentials.yml
+/boot/data
+/boot/initial
 /data
+/original_call
 /model
 /output
 /report
-/first_version
 /model
+/original_call
 output.html
 inventory.docx
 inventory_final_commented.docx
