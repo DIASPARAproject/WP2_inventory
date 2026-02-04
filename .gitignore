@@ -13,6 +13,7 @@ credentials.yml
 /report
 /model
 /original_call
+/before_corrections
 output.html
 inventory.docx
 inventory_final_commented.docx
