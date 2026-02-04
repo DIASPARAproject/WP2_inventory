@@ -31,7 +31,6 @@ load("data/individual_all.RData")
 #create directories
 mkdir("data/issues/removals")
 mkdir("data/issues/odd_data")
-mkdir("data/issues/data_issues_call")
 mkdir("data/issues/plots")
 mkdir("data/issues/tables")
 mkdir("data/issues/plots/patterns")

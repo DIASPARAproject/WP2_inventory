@@ -1,5 +1,5 @@
 # define libraries needed
-libs <- c("tidyverse") 
+libs <- c("tidyverse", "icesTAF") 
 
 #define libraries already installed
 installed_libs <- libs %in% rownames(installed.packages())
@@ -12,7 +12,9 @@ if (any(installed_libs == F)) {
 ### load libraries needed
 invisible(lapply(libs, library, character.only = T))
 
-
+### create directories
+mkdir("data/issues/data_issues_call/comma")
+mkdir("data/issues/data_issues_call/semicolon")
 
 
 # 1. Load all relevant data ####
@@ -50,15 +52,30 @@ all_odd <- all_odd %>%
   select(mei_fi_id, fi_id_cou, fi_year, fi_date, ser_x, ser_y, ser_cou_code, ser_nameshort, ser_emu_nameshort, ser_hty_code, lengthmm, weightg, ageyear, female_proportion, method_sex, sex, sex_SI, sex_source, fi_lfs_code, lfs_SI, ser_lfs_code, lfs_code, lfs_code_source, sai_samplingstrategy, sai_samplingobjective, fi_comment, sai_comment, ser_qal_id, source, issue) %>% 
   mutate(action = "")
 
+#save all_odd
+save(all_odd, file = "data/issues/data_issues_call/all_odd.RData")
+
 # Split into list of dataframes by ser_cou_code
 split_dfs <- split(all_odd, all_odd$ser_cou_code)
 
-# Save each dataframe to a CSV
+# Save each dataframe to a CSV (comma separated)
 invisible(lapply(names(split_dfs), function(code) {
   write.table(
     split_dfs[[code]],
-    file = file.path("data/issues/data_issues_call", paste0("validate_", code, ".csv")),
+    file = file.path("data/issues/data_issues_call/comma", paste0("validate_", code, ".csv")),
     sep = ",",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = TRUE
+  )
+}))
+
+# Save each dataframe to a CSV (semicolon separated)
+invisible(lapply(names(split_dfs), function(code) {
+  write.table(
+    split_dfs[[code]],
+    file = file.path("data/issues/data_issues_call/semicolon", paste0("validate_", code, ".csv")),
+    sep = ";",
     row.names = FALSE,
     col.names = TRUE,
     quote = TRUE

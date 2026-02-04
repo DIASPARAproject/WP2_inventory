@@ -8,7 +8,7 @@ library(flextable)
 library(tidyverse)
 library(yaml)
 
-cred <- read_yaml("credentials.yml")
+cred <- read_yaml("boot/initial/data/credentials.yml")
 
 con_wgeel <- dbConnect(Postgres(), dbname=cred$dbname,host=cred$host,port=cred$port,user=cred$user, password=cred$password)
 

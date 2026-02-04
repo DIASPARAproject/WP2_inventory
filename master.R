@@ -1,3 +1,10 @@
+############################ IMPORTANT ###########################
+
+# There are two initial datasets, before corrections were applied, and after. By default, the scripts are set up to run on the most recent dataset.
+# IF you want to run the scripts on the dataset before any corrections were provided by data providers, you need to go to the script 
+# "boot/compilation.R" and change the loaded files in lines 24 and 26 to biometry_sampling_before_corr.RData  & biometry_series_before_corr.RData
+
+
 
 # 1. PREPARATION TO RUN SCRIPT #################################################  
 
