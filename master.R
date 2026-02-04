@@ -55,18 +55,12 @@ taf.boot(software = FALSE)
 
 
 
-# 4. CREATE UTILITIES ##########################################################
-
-#source("utilities/utilities.R") 
-
-
-
 
 #--------------------------------------------------------------------------------#
 #####----- RUN SCRIPT FROM HERE IF YOU DO NOT WANT TO IMPORT DATA AGAIN -----#####
 #--------------------------------------------------------------------------------#
 
-# 5. (RE)LOAD LIBRARIES ########################################################
+# 4. (RE)LOAD LIBRARIES ########################################################
 
 # define libraries needed
 libs <- c("icesTAF", "rmarkdown")
@@ -85,7 +79,7 @@ invisible(lapply(libs, library, character.only = T))
 
 
 
-# 6. SOURCE SCRIPTS  ########################################################### 
+# 5. SOURCE SCRIPTS  ########################################################### 
 
 # remove all folders (including what's in them, that were created by the scripts below)
 clean()
@@ -95,10 +89,10 @@ rm(list = ls())
 
 # run the scripts
 source("data.R")
-  rmarkdown::render('data_issues.Rmd', output_file = "data/issues/issues.html")
-  source("data_issues_call.R")
-  source("data_LHTsite.R")
-  source("data_LHTemu.R")
+  #rmarkdown::render('data_issues.Rmd', output_file = "data/issues/issues.html")
+  #source("data_issues_call.R")
+  #source("data_LHTsite.R")
+  #source("data_LHTemu.R")
 #source("model.R")
 source("output.R")
   rmarkdown::render('output_inventory.Rmd', output_file = "output/inventory/inventory.docx")

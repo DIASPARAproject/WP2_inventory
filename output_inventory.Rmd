@@ -3,9 +3,9 @@ title: 'DIASPARA WP2 EEL Inventory v1'
 author: 'Jan-Dag Pohlmann'
 date: '02-04-2025'
 output: 
-  word_document: default
   html_document: 
     css: style.css
+  word_document: default
   pdf_document: default
 ---
 
