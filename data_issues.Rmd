@@ -515,15 +515,15 @@ flextable(summary_G_wl_odd %>%
 
 #plot faulty data
 plot_G_wl_log <- ggplot(data = df_G_plot, aes(x = log(lengthmm), y = log(weightg))) +
-  geom_point(aes(color = issue), shape = 16, alpha = 0.4, size = 1) +
-  scale_color_viridis_d(option = "cividis") +  # Use viridis discrete color scale
+  geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) + 
   geom_line(aes(x = log(lengthmm), y = prediction), color = "black") +
   geom_ribbon(aes(ymin = prediction_lower, ymax = prediction_upper), fill = "gray70", alpha = 0.3) +
   theme_bw()
 
 plot_G_wl <- ggplot(data = df_G_plot, aes(x = lengthmm, y = weightg)) +
-  geom_point(aes(color = issue), shape = 16, alpha = 0.4, size = 1) +
-  scale_color_viridis_d(option = "cividis") +  # Use viridis discrete color scale
+  geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) +  
   geom_line(aes(x = lengthmm, y = exp(prediction)), color = "black") +
   geom_ribbon(aes(ymin = exp(prediction_lower), ymax = exp(prediction_upper)), fill = "gray70", alpha = 0.3) +
   theme_bw()
@@ -618,15 +618,15 @@ flextable(summary_Y_wl_odd %>%
 
 #plot faulty data
 plot_Y_wl_log <- ggplot(data = df_Y_plot, aes(x = log(lengthmm), y = log(weightg))) +
-  geom_point(aes(color = issue), shape = 16, alpha = 0.4, size = 1) +
-  scale_color_viridis_d(option = "cividis") +  # Use viridis discrete color scale
+  geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) +
   geom_line(aes(x = log(lengthmm), y = prediction), color = "black") +
   geom_ribbon(aes(ymin = prediction_lower, ymax = prediction_upper), fill = "gray70", alpha = 0.3) +
   theme_bw()
 
 plot_Y_wl <- ggplot(data = df_Y_plot, aes(x = lengthmm, y = weightg)) +
-  geom_point(aes(color = issue), shape = 16, alpha = 0.4, size = 1) +
-  scale_color_viridis_d(option = "cividis") +  # Use viridis discrete color scale
+  geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) +
   geom_line(aes(x = lengthmm, y = exp(prediction)), color = "black") +
   geom_ribbon(aes(ymin = exp(prediction_lower), ymax = exp(prediction_upper)), fill = "gray70", alpha = 0.3) +
   scale_x_continuous(limits = c(min(df_Y_plot$lengthmm), max(df_Y_plot$lengthmm[which(!is.na(df_Y_plot$weightg))]))) +
@@ -757,15 +757,15 @@ flextable(summary_S_wl_odd %>%
 
 #plot faulty data
 plot_S_wl_log <- ggplot(data = df_S_plot, aes(x = log(lengthmm), y = log(weightg))) +
-  geom_point(aes(color = issue), shape = 16, alpha = 0.4, size = 1) +
-  scale_color_viridis_d(option = "cividis") +  # Use viridis discrete color scale
+  geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) +
   geom_line(aes(x = log(lengthmm), y = prediction), color = "black") +
   geom_ribbon(aes(ymin = prediction_lower, ymax = prediction_upper), fill = "gray70", alpha = 0.3) +
   theme_bw()
 
 plot_S_wl <- ggplot(data = df_S_plot, aes(x = lengthmm, y = weightg)) +
-  geom_point(aes(color = issue), shape = 16, alpha = 0.4, size = 1) +
-  scale_color_viridis_d(option = "cividis") +  # Use viridis discrete color scale
+  geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) +
   geom_line(aes(x = lengthmm, y = exp(prediction)), color = "black") +
   geom_ribbon(aes(ymin = exp(prediction_lower), ymax = exp(prediction_upper)), fill = "gray70", alpha = 0.3) +
   theme_bw()
