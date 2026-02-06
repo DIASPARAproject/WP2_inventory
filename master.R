@@ -103,15 +103,19 @@ rm(list = ls())
 
 # run the scripts
 source("data.R")
-  rmarkdown::render('data_issues_report_base.Rmd', output_file = "data/issues/issues_report_base.html")
-  source("data_call.R")
-  #source("data_call_response.R")
-  rmarkdown::render('data_issues_report.Rmd', output_file = "data/issues/issues_report.html")
-  #source("data_LHTsite.R")
-  #source("data_LHTemu.R")
-#source("model.R")
+  rmarkdown::render('data_issues_report_before.Rmd', output_file = "data/issues/issues_report_base.html")
+  source("data_call_base.R") #create the initial data call
+  rmarkdown::render('data_issues_report_after.Rmd', output_file = "data/issues/issues_report.html")
 source("output.R")
   rmarkdown::render('output_inventory.Rmd', output_file = "output/inventory/inventory.docx")
-  #rmarkdown::render('output_overview.Rmd', output_file = "output/overview/overview.docx")
-#source("report.R")
+  
 
+
+# exploration scripts; no longer used  
+  #source("data_LHTsite.R")
+  #source("data_LHTemu.R")
+  #rmarkdown::render('output_overview.Rmd', output_file = "output/overview/overview.docx")
+  
+# unused taf scripts
+  #source("model.R")
+  #source("report.R")

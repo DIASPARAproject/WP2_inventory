@@ -12,7 +12,7 @@ output:
 ```{r Initial preparations, echo=FALSE, warning = FALSE, message = FALSE}
 
 # define libraries needed
-libs <- c("tidyverse", "icesTAF", "stringr", "flextable", "ggplot2", "viridis", "purrr", "quantreg") 
+libs <- c("tools", "tidyverse", "icesTAF", "stringr", "flextable", "ggplot2", "viridis", "purrr", "quantreg", "RColorBrewer") 
 
 #define libraries already installed
 installed_libs <- libs %in% rownames(installed.packages())
@@ -30,9 +30,11 @@ rm(list = ls())
 
 #load data 
 load("data/individual_all.RData")
+load("data/individual_all_base.RData")
 load("data/models/model_G_wl_base.RData")
 load("data/models/model_Y_wl_base.RData")
 load("data/models/model_S_wl_base.RData")
+load("data/issues/data_call_base/all_odd_base.RData")
 
 #create directories
 mkdir("data/issues/removals")
@@ -43,14 +45,195 @@ mkdir("data/issues/plots/patterns")
 
 ```
 
-This script/report aims at identifying fish with issues that may be solved. These individuals are stored in data frames ending with "odd" and used to produce spreadsheets to ask data providers for validation/clarification.
+After the first evaluation of individual biometric data in the WGEEL database several issues were discovered, such as incomplete reporting or potentially incorrect data. In 2025 a data call was sent to data providers asking for correction, validation or provision of missing data. Further, data providers were asked to provide any individual biometric data that was not reported before, stressing it's relevance for the DIASPARA project and the envisioned assessment approach.
+This script/report re-evaluates the data after corrections, validations and integration of new data. Ultimately, based on these findings the data suitable for the LHT models was selected.
 
 
-## 1. Extract & remove fish without length, independent of stage
+## 1. Data call response and 2025 call summary
+
+This section summarizes the response to the data call on issues identified in the individual biometric data, as well as new data entries during the 2025 ICE WGEEL data call.
+
+### Tab 1.1: Summary of the number of individuals in the database at the start of the project, identified issues/corrections and the total after the 2025 ICES data call. Note, that the difference in the total number of individuals does not necessarily reflect the number of new integrations since existing individual biometric data may have been deleted from the database.
+
+```{r data call response summary, echo=FALSE, warning = FALSE, message = FALSE, fig.align = "left", ft.align="left"}
+
+#COUNT RESPONSES BY COUNTRY
+
+# Define the path from project root
+folder_path <- "data/issues/data_call_base_response"
+
+# List files
+file_list <- list.files(path = folder_path, 
+                        pattern = "\\.(csv|xlsx)$", 
+                        full.names = TRUE)
+
+df_list <- basename(file_list) %>% 
+  str_replace("\\.", "_")
+
+#load xlsx files and reduce to relevant cols
+xlsx_files <- file_list[grepl("\\.xlsx$", file_list)]
+
+for (f in xlsx_files) {
+  obj_name <- str_replace(basename(f), "\\.", "_")
+  assign(obj_name, read_excel(f) %>% 
+           select(mei_fi_id, ser_cou_code, issue, action) %>% 
+           mutate(across(everything(), as.character)))
+}
+
+# load csvs (semicolon separated) and reduce to relevant cols
+csv_files <- file_list[grepl("\\.csv$", file_list)]
+
+for (f in csv_files) {
+  first_line <- readLines(f, n = 1)
+  if (grepl(";", first_line)) {
+    obj_name <- str_replace(basename(f), "\\.", "_")
+    assign(obj_name, read.csv2(f, colClasses = "character") %>% 
+             select(mei_fi_id, ser_cou_code, issue, action))
+  }
+}
+
+# load csvs (comma separated) and reduce to relevant cols
+for (f in csv_files) {
+  first_line <- readLines(f, n = 1)
+  if (!grepl(";", first_line)) {
+    obj_name <- str_replace(basename(f), "\\.", "_")
+    assign(obj_name, read.csv(f, colClasses = "character") %>% 
+             select(mei_fi_id, ser_cou_code, issue, action))
+  }
+}
+
+# combine in one dataframe
+combined_df <- bind_rows(mget(df_list)) %>% 
+  mutate(action = na_if(action, "NA"),
+         action = na_if(action, ""),
+         mei_fi_id = as.integer(mei_fi_id)) 
+  
+
+# Find duplicated IDs with conflicting actions
+conflicts <- combined_df %>%
+  group_by(mei_fi_id) %>%
+  filter(n() > 1) %>%                      # Keep only duplicates
+  filter(n_distinct(action) > 1) %>%       # Keep only if actions differ
+  ungroup()
+
+#nrow(conflicts) #checked if there is conflicts with different actions for the same ID before removing duplicates. None there.
+
+# remove duplicates (since some were provided as xlsx and csv, before was checked if they differ in the action (they do not)
+combined_df_clean <- combined_df %>% 
+  distinct(mei_fi_id, .keep_all = TRUE)
+
+#create dataframe with only those corrected or validated
+df_corrected <- combined_df_clean %>% 
+  filter(!is.na(action)) 
+
+#create summary of answers by country
+summary_individuals_corrected <- df_corrected %>% 
+count(ser_cou_code, name = "validated_corrected")
+
+#count all individuals per country
+summary_individual_all_base <- individual_all_base %>% 
+  count(ser_cou_code, name = "total_before_call")
+
+#count all individuals with issues per country
+summary_all_odd_base_country <- all_odd_base %>%
+  count(ser_cou_code, name = "issues")
+
+#create dataframe with total after 2025 call
+summary_all_new_country <- individual_all %>% 
+  count(ser_cou_code, name = "total_after_call")
+
+#create summary of added fish after 2025
+summary_added_fish <- left_join(summary_individual_all_base, summary_all_new_country, by = "ser_cou_code") %>% 
+  select(-total_before_call)
+
+#knit to a single df
+summary_issues_base <- list(summary_individual_all_base, summary_all_odd_base_country, summary_individuals_corrected, summary_added_fish) %>%
+  reduce(left_join, by = "ser_cou_code") %>% 
+  bind_rows(summarise(., ser_cou_code = "Sum", across(where(is.numeric), \(x) sum(x, na.rm = TRUE))))
+
+summary_issues_base %>%
+  flextable() %>%
+  set_header_labels(
+    ser_cou_code = "Country",
+    total_before_call = "Ind. before 2025 call",
+    issues = "Ind. with potential issues",
+    validated_corrected = "Ind. corrected/validated",
+    total_after_call = "Ind. after 2025 call"
+  ) %>% 
+  colformat_double(big.mark = " ", digits = 0) %>% 
+  colformat_int(big.mark = " ") %>%
+  hline(i = nrow(summary_issues_base) - 1, part = "body", border = officer::fp_border(width = 1)) %>%
+  autofit()
+
+```
+
+In response to the data call adressing potential issues in the biometric data, 7 out of 16 countries replied, providing validation or corrections for about 24338 individual or 30% of the identified issues. Following the 2025 ICES data call 91053 fish were added to the database. 
+
+
+```{r data call issues summary, echo=FALSE, warning = FALSE, message = FALSE, fig.align = "left", ft.align="left"}
+  
+#count issues by country
+summary_all_odd_base_issue <- all_odd_base %>%
+  separate_longer_delim(issue, delim = ",") %>%
+  mutate(issue = trimws(issue)) %>%
+  count(ser_cou_code, issue) %>% 
+  arrange(ser_cou_code, desc(n)) %>% 
+  mutate(issue = reorder(issue, -n))
+
+summary_all_odd_after_correction <- all_odd_base %>% 
+  anti_join(df_corrected, by = "mei_fi_id") %>% 
+  separate_longer_delim(issue, delim = ",") %>%
+  mutate(issue = trimws(issue)) %>%
+  count(ser_cou_code, issue) %>% 
+  arrange(ser_cou_code, desc(n)) %>% 
+  mutate(issue = reorder(issue, -n))
+  
+
+# 1. Grab the 12 colors from the Paired palette
+my_colors <- brewer.pal(12, "Paired")
+
+# 2. Add a 13th color that is definitely NOT white
+my_colors <- c(my_colors, "black")
+
+#create a plot with issues by country before correction
+plot_issues_before <- ggplot(data = summary_all_odd_base_issue, aes(x = ser_cou_code, y = n, fill = issue)) +
+  geom_col(position = "dodge", alpha = 0.7, color = "white") +
+  scale_fill_manual(values = my_colors) +
+  labs(
+    title = "Issues per Country before validation",
+    x = "Country Code",
+    y = "Number of Occurrences"
+  ) +
+  theme_bw()
+
+#create a plot with issues by country after correction
+plot_issues_after <- ggplot(data = summary_all_odd_after_correction, aes(x = ser_cou_code, y = n, fill = issue)) +
+  geom_col(position = "dodge", alpha = 0.7, color = "white") +
+  scale_fill_manual(values = my_colors) +
+  labs(
+    title = "Issues per Country after validation (excluding new data)",
+    x = "Country Code",
+    y = "Number of Occurrences"
+  ) +
+  theme_bw()
+
+plot_issues_before
+plot_issues_after
+
+
+
+
+```
+
+#### Fig 1.1: Summary of issues identified by country and type of the issue
+
+
+
+## 2. Extract & remove fish without length, independent of stage
 
 Length is a crucial parameter for all planned analyses. Hence, before any further analyses, fish where no length is provided were removed from the data in order to ease further formatting/analyses. Removed data was stored in "data/issues/lists/df_no_length.RData"
 
-#### Tab 1.1: Eels removed due to missing length; by stage and sex.
+#### Tab 2.1: Eels removed due to missing length; by stage and sex.
 
 ```{r remove eels with no length, echo=FALSE, warning = FALSE, message = FALSE, fig.align = "left", ft.align="left"}
 
@@ -87,11 +270,11 @@ save(df_no_length, file = "data/issues/removals/df_no_length.RData")
 
 
 
-## 2. Find eels where there is an issue with lifestage/sex 
+## 3. Find eels where there is an issue with lifestage/sex 
 
 This section aims to check where the lfs_code from SI does not match the lfs_code provided, as well as identifying eels where the provided sex does not match the lfs_code that is implicit in SI.
 
-#### Tab 2.1 Number of eels where there is an issue with lfs_code, sex, or both, by country and life stage (see header).
+#### Tab 3.1 Number of eels where there is an issue with lfs_code, sex, or both, by country and life stage (see header).
 
 ```{r extract errors with lfs or sex, echo=FALSE, warning = FALSE, message = FALSE, fig.align = "left", ft.align="left"}
 
@@ -101,7 +284,11 @@ df_all_lfs_sex_odd <- df_all_length %>%
   mutate(lfs_dont_match = fi_lfs_code != lfs_SI,
          sex_dont_match_SI = !is.na(sex_SI) & sex_SI != sex) %>% 
   mutate(issue = apply(select(., lfs_dont_match:sex_dont_match_SI), 1, function(x) 
-    paste(names(x)[which(x)], collapse = ", ")))
+    paste(names(x)[which(x)], collapse = ", "))) %>%
+  mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id) %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", issue))
+
+
 
 #create a summary of eels where sex or lfs_code dont match (separate for Y, S & YS)   
 create_summary_lfs <- function(lfs) {
@@ -117,6 +304,8 @@ create_summary_lfs <- function(lfs) {
     group_by(ser_cou_code) %>%
     summarize(lfs_dont_match = sum(lfs_dont_match, na.rm = TRUE),
               sex_dont_match_SI = sum(sex_dont_match_SI, na.rm = TRUE),
+              validated = sum(valid, na.rm = TRUE),
+              Remaining = sum(!valid, na.rm = TRUE),
               Total = length(unique(mei_fi_id)),
               .groups = "drop") %>%
     bind_rows(summarize(., ser_cou_code = "Sum", across(where(is.numeric), sum, na.rm = TRUE)))
@@ -179,14 +368,14 @@ save(df_all_lfs_sex_odd, file = "data/issues/odd_data/df_all_lfs_sex_odd.RData")
 
 ```
 
-#### Fig 2.1 Number of eels where there is an issue with lfs_code, sex, or both by country and life stage (as provided by countries)
+#### Fig 3.1 Number of eels where there is an issue with lfs_code, sex, or both by country and life stage (as provided by countries)
 
 
-## 3. Extract issues with sex
+## 4. Extract issues with sex
 
 To identify eels with a potential issue in sex determination, the following eels were extracted: i) where no sex, but a method for sex determination was provided, ii) where sex was provided but no method was provided or iii)  where sex was provided based on length measurements but for a yellow eel smaller than 45cm. The respective individuals were flagged and stored in "data/issues/lists/df_Y_sex_odd.RData" for validation/clarification.
 
-#### Tab 3.1: Numbers of eels with an issue in sex determination, by country and life stage (see header).
+#### Tab 4.1: Numbers of eels with an issue in sex determination, by country and life stage (see header).
 
 ```{r extract eels where there is an issue with sex, echo=FALSE, warning = FALSE, message = FALSE, fig.align = "left", ft.align="left"}
 
@@ -201,7 +390,9 @@ df_all_sex_odd <- df_all_length %>%
   filter(!(issue %in% c("sex_available", "no_sex"))) %>% 
   mutate(sex_by_length_issue = ifelse(issue == "sex_by_length_issue", TRUE, FALSE),
          no_method_but_sex = ifelse(issue == "no_method_but_sex", TRUE, FALSE),
-         no_sex_but_method = ifelse(issue == "no_sex_but_method", TRUE, FALSE)) %>% 
+         no_sex_but_method = ifelse(issue == "no_sex_but_method", TRUE, FALSE)) %>%
+  mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id) %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", issue)) %>% 
   relocate(issue, .after = last_col())
   
 #create summary table of odd data
@@ -220,6 +411,8 @@ create_summary_sex <- function(lfs) {
   summarize(sex_by_length_issue = sum(sex_by_length_issue, na.rm = TRUE),
             no_method_but_sex = sum(no_method_but_sex, na.rm = TRUE),
             no_sex_but_method = sum(no_sex_but_method, na.rm = TRUE),
+            validated = sum(valid, na.rm = TRUE),
+            Remaining = sum(!valid, na.rm = TRUE),
             Total = length(unique(mei_fi_id))) %>% 
             bind_rows(summarize(., ser_cou_code = "Sum", across(where(is.numeric), sum)))
 }
@@ -282,12 +475,12 @@ save(df_all_sex_odd, file = "data/issues/odd_data/df_all_sex_odd.RData")
 
 ```
 
-#### Fig 3.1: Number of fish with obvious an issue in sex by life stage and country 
+#### Fig 4.1: Number of fish with obvious an issue in sex by life stage and country 
 
 
 
 
-## 4. Eels without precise location
+## 5. Eels without precise location
 
 For the modeling exercises in DIASPARA, it may be necessary to use different spatial structures than those typically provideed with individual data (i.e. EMU). If a catch location is present, eels can be assigned to any other spatial structure (e.g. river basin) but his is not always the case. In this section eels where no catch location is available are extracted and compared against the total number of individual data in the respective EMUs.
 
@@ -302,7 +495,9 @@ df_all_coord_odd <- df_all_length %>%
          ser_x_out_of_range = ser_x > 53 | ser_x < -30) %>% 
   filter(if_any(c(coordinates_missing, ser_y_out_of_range, ser_x_out_of_range), ~ . == TRUE)) %>%
   mutate(issue = apply(select(., coordinates_missing:ser_x_out_of_range), 1, function(x) 
-    paste(names(x)[which(x)], collapse = ", ")))
+    paste(names(x)[which(x)], collapse = ", "))) %>%
+  mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id) %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", issue))
 
 #create a dataframe with all EMUs where some eels are missing coordinates
 df_all_emus_no_coord <- df_all_length %>%
@@ -312,7 +507,9 @@ df_all_emus_no_coord <- df_all_length %>%
          ser_x_out_of_range = ser_x > 53 | ser_x < -30) %>%
     mutate(issue = apply(select(., coordinates_missing:ser_x_out_of_range), 1, function(x) {
       flagged <- names(x)[which(x)]
-      if (length(flagged) == 0) "no_issue" else paste(flagged, collapse = ", ")}))
+      if (length(flagged) == 0) "no_issue" else paste(flagged, collapse = ", ")})) %>%
+  mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id) %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", issue))
 
 #create a summary table
 create_summary_coordinates <- function(lfs) {
@@ -331,6 +528,8 @@ create_summary_coordinates <- function(lfs) {
             ser_y_out_of_range = sum(ser_y_out_of_range == TRUE, na.rm = TRUE),
             ser_x_out_of_range = sum(ser_x_out_of_range == TRUE, na.rm = TRUE),
             no_issue = sum(issue == "no_issue", na.rm = TRUE),
+            validated = sum(valid, na.rm = TRUE),
+            Remaining = sum(!valid, na.rm = TRUE) - no_issue,
             .groups = "drop")
 }
 
@@ -395,13 +594,13 @@ save(df_all_coord_odd, file = "data/issues/odd_data/df_all_coord_odd.RData")
 
 
 
-## 5. Extract eels with obvious issues in length, weight or age
+## 6. Extract eels with obvious issues in length, weight or age
 
 Before conducting checks on available length data, all eels with lengthmm < 30mm, lengthmm > 1600mm, weightg < 0.01, weightg > 5000 or ageyear >50 are considered unrealistic and were removed from the dataset in order to ease further analyses. Removed eels were stored in "data/issues/lists/df_obvious_odd.RData" for validation/clarification. In the following only the cleaned dataset is used. Removals and all remaining eels in the dataset are listed  per life stage. 
 
-#### Tab 5.1 (top): Number of fish with obvious errors by stage and issue type 
+#### Tab 6.1 (top): Number of fish with obvious errors by stage and issue type 
 
-#### Tab 5.2 (bottom): number of individuals remaining in the dataset by lifestage
+#### Tab 6.2 (bottom): Number of individuals remaining in the dataset by lifestage
 
 ```{r extract obvious errors, echo=FALSE, warning = FALSE, message = FALSE, fig.align = "left", ft.align="left"}
 
@@ -415,10 +614,12 @@ df_all_obvious_odd <- df_all_length %>%
          too_old = ageyear > 50) %>%
   filter(if_any(c(too_short, too_long, too_light, too_heavy, too_old), ~ . == TRUE)) %>%
   mutate(issue = apply(select(., too_short:too_old), 1, function(x) 
-    paste(names(x)[which(x)], collapse = ", ")))
+    paste(names(x)[which(x)], collapse = ", "))) %>%
+  mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id) %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", issue))
 
 # remove odd eels from data
-df_all_clean <- anti_join(df_all_length, df_all_obvious_odd, by = "mei_fi_id")
+df_all_clean <- anti_join(df_all_length, df_all_obvious_odd %>% filter(valid == FALSE), by = "mei_fi_id")
 
 # create a summary table with removals
 summary_all_obvious_odd <- df_all_obvious_odd %>% 
@@ -428,7 +629,8 @@ summary_all_obvious_odd <- df_all_obvious_odd %>%
                       "lengthmm > 1600" = sum(too_long, na.rm =T),
                       "weigthg < 0.01" = sum(too_light, na.rm =T),
                       "weightg > 5000" = sum(too_heavy, na.rm =T),
-                      "ageyear > 50" = sum(too_old, na.rm =T)) %>% 
+                      "ageyear > 50" = sum(too_old, na.rm =T),
+                      "validated" = sum(valid, na.rm = TRUE)) %>% 
               bind_rows(summarize(., lfs_code = "Sum", across(where(is.numeric), sum)))
 
 #print summary table of removals
@@ -456,7 +658,7 @@ save(df_all_obvious_odd, file = "data/issues/odd_data/df_all_obvious_odd.RData")
 ```
 
 
-## 6. Extract issues with weight or length in glass eel data (lfs_code = G)
+## 7. Extract issues with weight or length in glass eel data (lfs_code = G)
 
 All eels where stage is G, with length > 150mm or weight > 3g, are considered as unrealistic and were flagged. Subsequently, a log/log relationship was fit on weight and length (quantile regression, tau = .5; without the previously flagged data). If a residual exceeded the 99.5% prediction interval, the respective eel was flagged. All flagged eels were extracted and stored in "data/issues/lists/df_G_wl_odd.RData" for validation/clarification.
 
@@ -473,10 +675,12 @@ df_G_obvious_odd <- df_G %>%
          unrealistic_weight = weightg > 3) %>%
   filter(if_any(c(unrealistic_length, unrealistic_weight), ~ . == TRUE)) %>%
   mutate(issue = apply(select(., unrealistic_length:unrealistic_weight), 1, function(x) 
-    paste(names(x)[which(x)], collapse = ", "))) 
+    paste(names(x)[which(x)], collapse = ", "))) %>%
+  mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id) %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", issue))
 
 #...and create a clean df without them
-df_G_clean <- anti_join(df_G, df_G_obvious_odd, by = "mei_fi_id")
+df_G_clean <- anti_join(df_G, df_G_obvious_odd %>% filter(valid == FALSE), by = "mei_fi_id")
 
 #fit weight length relationships for glass eel (quantile regression, tau .1, .5, .9)
 model_G_wl <- rq(log(weightg)~log(lengthmm), tau = 0.5, data = df_G_clean)
@@ -494,17 +698,20 @@ df_G_clean <- df_G_clean %>%
          prediction_upper_base = prediction_base + residual_thresholds_G_base[2],  # Upper bound from base model
          prediction_lower = prediction_base + residual_thresholds_G[1],  # Lower bound from new model
          prediction_upper = prediction_base + residual_thresholds_G[2],  # Upper bound from new model
-         weight_length_off = residual < residual_thresholds_G_base[1] | residual > residual_thresholds_G_base[2]) # compare against base threshold
+         weight_length_off = residual < residual_thresholds_G_base[1] | residual > residual_thresholds_G_base[2]) %>%    # compare against base threshold
+         mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id)
+         
 
 #extract data where weight length relationship is below/above threshold
 df_G_wl_odd <- df_G_clean %>% 
   filter(weight_length_off == TRUE) %>%
-  mutate(issue = "weight_length_off") %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", "weight_length_off")) %>% 
   select(-prediction_base, -prediction, -residual, -prediction_upper_base, -prediction_lower_base, -prediction_upper, -prediction_lower) 
 
 #add lables for plot
 df_G_plot <-  df_G_clean %>% 
-  mutate(issue = case_when(weight_length_off == TRUE ~ "weight_length_off", 
+  mutate(issue = case_when(valid == TRUE ~ "validated",
+                           weight_length_off == TRUE ~ "weight_length_off",
                            TRUE ~ "no_issue"))
 
 #create summary table with removals
@@ -514,6 +721,8 @@ summary_G_wl_odd <- df_G_wl_odd %>%
                     summarize(unrealistic_lenght = sum(unrealistic_length, na.rm = TRUE),
                               unrealistic_weight = sum(unrealistic_weight, na.rm = TRUE),
                               weight_length_off = sum(weight_length_off, na.rm = TRUE),
+                              validated = sum(valid, na.rm = TRUE),
+                              Remaining = sum(!valid, na.rm = TRUE),
                               Total = length(unique(mei_fi_id))) %>% 
               bind_rows(summarize(., ser_cou_code = "Sum", across(where(is.numeric), sum)))
 
@@ -526,7 +735,7 @@ flextable(summary_G_wl_odd %>%
 plot_G_wl_log <- ggplot(data = df_G_plot, aes(x = log(lengthmm), y = log(weightg))) +
   geom_ribbon(aes(ymin = prediction_lower_base, ymax = prediction_upper_base), fill = "gray70", alpha = 0.3) +
   geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
-  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) + 
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00", "validated" = "#C71585")) + 
   geom_line(aes(x = log(lengthmm), y = prediction_base), color = "black", linewidth = 0.8) +
   geom_line(aes(x = log(lengthmm), y = prediction), color = "red", linewidth = 0.3) +
   geom_line(aes(x = log(lengthmm), y = prediction_lower), color = "red", linewidth = 0.4, linetype = "dashed") +
@@ -536,7 +745,7 @@ plot_G_wl_log <- ggplot(data = df_G_plot, aes(x = log(lengthmm), y = log(weightg
 plot_G_wl <- ggplot(data = df_G_plot, aes(x = lengthmm, y = weightg)) +
   geom_ribbon(aes(ymin = exp(prediction_lower_base), ymax = exp(prediction_upper_base)), fill = "gray70", alpha = 0.3) +
   geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
-  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) +  
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00", "validated" = "#C71585")) +  
   geom_line(aes(x = lengthmm, y = exp(prediction_base)), color = "black", linewidth = 0.8) +
   geom_line(aes(x = lengthmm, y = exp(prediction)), color = "red", linewidth = 0.3) +
   geom_line(aes(x = lengthmm, y = exp(prediction_lower)), color = "red", linewidth = 0.4, linetype = "dashed") +
@@ -561,19 +770,19 @@ save(df_G_wl_odd, file = "data/issues/odd_data/df_G_wl_odd.RData")
 
 ```
 
-#### Fig 6.1: Length-weight relationship for glass eels on log/log and natural scale. Black line shows the quantile regression model (tau = 0.5), fit on the log/log-scale. Grey ribbon indicates 99.9% conditional prediction interval which was used to identify data with no issue (blue dots) vs data with potential issues (yellow dots) which was extracted for validation/clarification. 
+#### Fig 7.1: Length-weight relationship for glass eels on log/log and natural scale. Black line shows the quantile regression model (tau = 0.5), fit on the log/log-scale. Grey ribbon indicates 99.9% conditional prediction interval which was used to identify data with no issue (blue dots) vs data with potential issues (yellow dots) which was extracted for validation/clarification. 
 Note, fish with length > 150mm, or weight > 3g are not shown and were not used to fit the weigh-length relationship, but they are included in the extracted glass eels with odd biometric data for validation/clarification. 
 
 In summary, for two fish, length was unrealistically high, while 197 fish show large residuals and were extracted for validation/clarification. However, these fish are likely not relevant for DIASPARA analyses since they are seemingly actual glass eels. 
 
 
-## 7. Extract issues in yellow eel data (lfs_code = Y)
+## 8. Extract issues in yellow eel data (lfs_code = Y)
 
-### 7.1 Yellow eels where weight and length do not match
+### 8.1 Yellow eels where weight and length do not match
 
 All eels where stage is Y, with length < 65mm or weight < 1g are flagged. Subsequently, a log/log relationship was fit on weight and length (quantile regression, tau = .5; without the previously flagged data). If a residual exceeded the 99.5% prediction interval, the respective eel was flagged. All flagged eels were extracted for validation/clarification and stored in "data/issues/lists/df_Y_wl_odd.RData".
 
-#### Tab 7.1: Number of yellow eels with an issue in weight or length by country
+#### Tab 8.1: Number of yellow eels with an issue in weight or length by country
 
 ```{r extract Y where there is an issue with wl, echo=FALSE, warning = FALSE, message = FALSE, fig.align = "left", ft.align="left"}
 
@@ -586,10 +795,12 @@ df_Y_obvious_odd <- df_Y %>%
          unrealistic_weight = weightg < 1) %>%
   filter(if_any(c(unrealistic_length, unrealistic_weight), ~ . == TRUE)) %>%
   mutate(issue = apply(select(., unrealistic_length:unrealistic_weight), 1, function(x) 
-    paste(names(x)[which(x)], collapse = ", "))) 
+    paste(names(x)[which(x)], collapse = ", "))) %>%
+  mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id) %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", issue))
 
 #...and create a clean df without them
-df_Y_clean <- anti_join(df_Y, df_Y_obvious_odd, by = "mei_fi_id")
+df_Y_clean <- anti_join(df_Y, df_Y_obvious_odd %>% filter(valid == FALSE), by = "mei_fi_id")
 
 #fit weight length relationships for glass eel (quantile regression, tau .1, .5, .9)
 model_Y_wl <- rq(log(weightg)~log(lengthmm), tau = 0.5, data = df_Y_clean)
@@ -607,17 +818,19 @@ df_Y_clean <- df_Y_clean %>%
          prediction_upper_base = prediction_base + residual_thresholds_Y_base[2],  # Upper bound from base model
          prediction_lower = prediction_base + residual_thresholds_Y[1],  # Lower bound from new model
          prediction_upper = prediction_base + residual_thresholds_Y[2],  # Upper bound from new model
-         weight_length_off = residual < residual_thresholds_Y_base[1] | residual > residual_thresholds_Y_base[2]) # compare against base threshold
-
+         weight_length_off = residual < residual_thresholds_Y_base[1] | residual > residual_thresholds_Y_base[2]) %>% # compare against base threshold
+         mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id)
+         
 #extract data where weight length relationship is below/above threshold
 df_Y_wl_odd <- df_Y_clean %>% 
   filter(weight_length_off == TRUE) %>%
-  mutate(issue = "weight_length_off") %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", "weight_length_off")) %>%
   select(-prediction_base, -prediction, -residual, -prediction_upper_base, -prediction_lower_base, -prediction_upper, -prediction_lower) 
 
 #create labels for plot
 df_Y_plot <-  df_Y_clean %>% 
-  mutate(issue = case_when(weight_length_off == TRUE ~ "weight_length_off", 
+  mutate(issue = case_when(valid == TRUE ~ "validated",
+                           weight_length_off == TRUE ~ "weight_length_off", 
                            TRUE ~ "no_issue"))
 
 #create summary table of odd data
@@ -627,6 +840,8 @@ summary_Y_wl_odd <- df_Y_wl_odd %>%
             summarize(unrealistic_lenght = sum(unrealistic_length, na.rm = TRUE),
                       unrealistic_weight = sum(unrealistic_weight, na.rm = TRUE),
                       weight_length_off = sum(weight_length_off, na.rm = TRUE),
+                      validated = sum(valid, na.rm = TRUE),
+                      Remaining = sum(!valid, na.rm = TRUE),
                       Total = length(unique(mei_fi_id))) %>% 
               bind_rows(summarize(., ser_cou_code = "Sum", across(where(is.numeric), sum)))
 
@@ -638,7 +853,7 @@ flextable(summary_Y_wl_odd %>%
 plot_Y_wl_log <- ggplot(data = df_Y_plot, aes(x = log(lengthmm), y = log(weightg))) +
   geom_ribbon(aes(ymin = prediction_lower_base, ymax = prediction_upper_base), fill = "gray70", alpha = 0.3) +
   geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
-  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) + 
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00", "validated" = "#C71585")) + 
   geom_line(aes(x = log(lengthmm), y = prediction_base), color = "black", linewidth = 0.8) +
   geom_line(aes(x = log(lengthmm), y = prediction), color = "red", linewidth = 0.3) +
   geom_line(aes(x = log(lengthmm), y = prediction_lower), color = "red", linewidth = 0.4, linetype = "dashed") +
@@ -648,7 +863,7 @@ plot_Y_wl_log <- ggplot(data = df_Y_plot, aes(x = log(lengthmm), y = log(weightg
 plot_Y_wl <- ggplot(data = df_Y_plot, aes(x = lengthmm, y = weightg)) +
   geom_ribbon(aes(ymin = exp(prediction_lower_base), ymax = exp(prediction_upper_base)), fill = "gray70", alpha = 0.3) +
   geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
-  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) +  
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00", "validated" = "#C71585")) +  
   geom_line(aes(x = lengthmm, y = exp(prediction_base)), color = "black", linewidth = 0.8) +
   geom_line(aes(x = lengthmm, y = exp(prediction)), color = "red", linewidth = 0.3) +
   geom_line(aes(x = lengthmm, y = exp(prediction_lower)), color = "red", linewidth = 0.4, linetype = "dashed") +
@@ -672,10 +887,10 @@ save(df_Y_wl_odd, file = "data/issues/odd_data/df_Y_wl_odd.RData")
 
 ```
 
-#### Fig 7.1: Length-weight relationship for yellow eels on log/log and natural scale. Black line shows the quantile regression model (tau = 0.5), fit on the log/log-scale. Grey ribbon indicates 99.9% conditional prediction intervals which was used to identify data with no issue (blue dots) vs data with potential issues (yellow dots) which was extracted for validation/clarification. 
+#### Fig 8.1: Length-weight relationship for yellow eels on log/log and natural scale. Black line shows the quantile regression model (tau = 0.5), fit on the log/log-scale. Grey ribbon indicates 99.9% conditional prediction intervals which was used to identify data with no issue (blue dots) vs data with potential issues (yellow dots) which was extracted for validation/clarification. 
 Note, fish with length < 65mm, or weight < 1g are not shown and were not used to fit the weigh-length relationship, but they are included in the extracted yellow eels with odd biometric data for validation/clarification.
 
-### 7.2 Highlight yellow eels with odd weight_length patterns
+### 8.2 Highlight yellow eels with odd weight_length patterns
 
 As seen in the weight-length relationship of yellow eels, some show odd patterns forming diagonal or horizontal lines. This section aims at identifying data sources with issues. Therefore, plots for each country, seperated by EMU are generated and stored in data/issues/plots/patterns and an example is shown below.
 
@@ -711,12 +926,12 @@ ggplot(data = df_Y_plot %>% filter(ser_cou_code == "FR"),
     facet_wrap(~ser_emu_nameshort)
 
 ```
-#### Fig 7.2: Panel of EMUs in France highlighting some data with ominous patterns. 
+#### Fig 8.2: Panel of EMUs in France highlighting some data with ominous patterns. 
+
+While the only country responding to this specific isue was FR, it was confirmed these lines result from averaging weight (batch weighing) while length are measured individually, hence this is considered a non-issue for the modeling of LHTs (weight not used).
 
 
-
-
-## 8. Extract issues in silver eel data (lfs_code = S)
+## 9. Extract issues in silver eel data (lfs_code = S)
 
 All eels where stage is S, with length < 150mm or weight < 10g are flagged. Subsequently, a log/log relationship was fit on weight and length (quantile regression, tau = .5; without the previously flagged data). If a residual exceeded the 99.5% prediction interval, the respective eel was flagged. All flagged eels were extracted for validation/clarification and stored in "data/issues/lists/df_S_wl_odd.RData".
 
@@ -733,12 +948,14 @@ df_S_obvious_odd <- df_S %>%
          unrealistic_weight = weightg < 10) %>%
   filter(if_any(c(unrealistic_length, unrealistic_weight), ~ . == TRUE)) %>%
   mutate(issue = apply(select(., unrealistic_length:unrealistic_weight), 1, function(x) 
-    paste(names(x)[which(x)], collapse = ", "))) 
+    paste(names(x)[which(x)], collapse = ", "))) %>%
+  mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id) %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", issue))
 
 #...and create a clean df without them
-df_S_clean <- anti_join(df_S, df_S_obvious_odd, by = "mei_fi_id")
+df_S_clean <- anti_join(df_S, df_S_obvious_odd %>% filter(valid == FALSE), by = "mei_fi_id")
 
-#fit weight length relationships for glass eel (quantile regression, tau .1, .5, .9)
+#fit weight length relationships for glass eel (quantile regression, tau .5)
 model_S_wl <- rq(log(weightg)~log(lengthmm), tau = 0.5, data = df_S_clean)
 
 # compute the residual thresholds 
@@ -754,26 +971,30 @@ df_S_clean <- df_S_clean %>%
          prediction_upper_base = prediction_base + residual_thresholds_S_base[2],  # Upper bound from base model
          prediction_lower = prediction_base + residual_thresholds_S[1],  # Lower bound from new model
          prediction_upper = prediction_base + residual_thresholds_S[2],  # Upper bound from new model
-         weight_length_off = residual < residual_thresholds_S_base[1] | residual > residual_thresholds_S_base[2]) # compare against base threshold
+         weight_length_off = residual < residual_thresholds_S_base[1] | residual > residual_thresholds_S_base[2]) %>%  # compare against base threshold
+         mutate(valid = mei_fi_id %in% df_corrected$mei_fi_id)
 
 #extract data where weight length relationship is below/above threshold
 df_S_wl_odd <- df_S_clean %>% 
   filter(weight_length_off == TRUE) %>%
-  mutate(issue = "weight_length_off") %>% 
+  mutate(issue = ifelse(valid == TRUE, "validated", "weight_length_off")) %>% 
   select(-prediction_base, -prediction, -residual, -prediction_upper_base, -prediction_lower_base, -prediction_upper, -prediction_lower) 
 
 #create labels for plot
 df_S_plot <-  df_S_clean %>% 
-  mutate(issue = case_when(weight_length_off == TRUE ~ "weight_length_off", 
+  mutate(issue = case_when(valid == TRUE ~ "validated",
+                           weight_length_off == TRUE ~ "weight_length_off", 
                            TRUE ~ "no_issue"))
 
-#create summary table of odd data
+#create summarS table of odd data
 summary_S_wl_odd <- df_S_wl_odd %>%
             bind_rows(df_S_obvious_odd) %>% 
             group_by(ser_cou_code) %>% 
             summarize(unrealistic_lenght = sum(unrealistic_length, na.rm = TRUE),
                       unrealistic_weight = sum(unrealistic_weight, na.rm = TRUE),
                       weight_length_off = sum(weight_length_off, na.rm = TRUE),
+                      validated = sum(valid, na.rm = TRUE),
+                      Remaining = sum(!valid, na.rm = TRUE),
                       Total = length(unique(mei_fi_id))) %>% 
               bind_rows(summarize(., ser_cou_code = "Sum", across(where(is.numeric), sum)))
 
@@ -785,7 +1006,7 @@ flextable(summary_S_wl_odd %>%
 plot_S_wl_log <- ggplot(data = df_S_plot, aes(x = log(lengthmm), y = log(weightg))) +
   geom_ribbon(aes(ymin = prediction_lower_base, ymax = prediction_upper_base), fill = "gray70", alpha = 0.3) +
   geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
-  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) + 
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00", "validated" = "#C71585")) + 
   geom_line(aes(x = log(lengthmm), y = prediction_base), color = "black", linewidth = 0.8) +
   geom_line(aes(x = log(lengthmm), y = prediction), color = "red", linewidth = 0.3) +
   geom_line(aes(x = log(lengthmm), y = prediction_lower), color = "red", linewidth = 0.4, linetype = "dashed") +
@@ -795,7 +1016,7 @@ plot_S_wl_log <- ggplot(data = df_S_plot, aes(x = log(lengthmm), y = log(weightg
 plot_S_wl <- ggplot(data = df_S_plot, aes(x = lengthmm, y = weightg)) +
   geom_ribbon(aes(ymin = exp(prediction_lower_base), ymax = exp(prediction_upper_base)), fill = "gray70", alpha = 0.3) +
   geom_point(aes(color = issue), shape = 16, alpha = 0.5, size = 1) +
-  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00")) +  
+  scale_color_manual(values = c("no_issue" = "#00204D", "weight_length_off" = "#FF9F00", "validated" = "#C71585")) +  
   geom_line(aes(x = lengthmm, y = exp(prediction_base)), color = "black", linewidth = 0.8) +
   geom_line(aes(x = lengthmm, y = exp(prediction)), color = "red", linewidth = 0.3) +
   geom_line(aes(x = lengthmm, y = exp(prediction_lower)), color = "red", linewidth = 0.4, linetype = "dashed") +
@@ -819,6 +1040,71 @@ save(df_S_wl_odd, file = "data/issues/odd_data/df_S_wl_odd.RData")
 
 ```
 
-#### Fig 8.1: Length-weight relationship for silver eels on log/log and natural scale. Black line shows the quantile regression model (tau = 0.5), fit on the log/log-scale. Grey ribbon indicates 99.9% conditional prediction intervals which was used to identify data with no issue (blue dots) vs data with potential issues (yellow dots) which was extracted for validation/clarification. 
+#### Fig 9.1: Length-weight relationship for silver eels on log/log and natural scale. Black line shows the quantile regression model (tau = 0.5), fit on the log/log-scale. Grey ribbon indicates 99.9% conditional prediction intervals which was used to identify data with no issue (blue dots) vs data with potential issues (yellow dots) which was extracted for validation/clarification. 
 Note, fish with length < 150mm, or weight < 10g are not shown and were not used to fit the weigh-length relationship, but they are included in the extracted silver eels with odd biometric data for validation/clarification.
 
+
+## 10. Summarize odd data and remove those relevant for LHT model from the dataset
+
+```{r create data for LHT model, echo=FALSE, warning = FALSE, message = FALSE, fig.align = "left", ft.align="left"}
+
+#compile all odd data
+files <- list.files("./data/issues/odd_data", 
+                    pattern = "_odd\\.RData$", 
+                    full.names = TRUE)
+
+#extract names from "files" (dfs already in environment from the script above)
+obj_names <- file_path_sans_ext(basename(files))
+
+#combine them into one dataframe and drop the column issue
+all_odd <- mget(obj_names) %>% 
+  bind_rows() %>% 
+  select(-issue) %>%
+  group_by(mei_fi_id) %>%
+  summarize(across(everything(), ~ na.omit(.x)[1]), .groups = "drop")
+
+#create a vector of all logical columns
+logi_cols <- names(Filter(is.logical, all_odd))
+
+#add issues column  
+all_odd <- all_odd %>% 
+  filter(if_any(all_of(logi_cols), ~ .)) %>%
+  mutate(issue = apply(select(., all_of(logi_cols)), 1, function(x) {
+    paste(names(x)[which(x)], collapse = ", ")
+  })) %>% 
+  select(mei_fi_id, fi_id_cou, ser_cou_code, lfs_code, lengthmm, ageyear, issue)
+
+
+#create a df with all odd individuals that were validated
+all_odd_validated <- all_odd %>%
+  filter(str_detect(issue, "valid"))
+
+#create a df with all odd individuals that were not validated
+all_odd_unvalidated <- all_odd %>% anti_join(all_odd_validated, by = "mei_fi_id")
+  
+# create a vector with issues considered highly relevant to the analyses
+relevant <- c("weight_length_off|ser_y_out_of_range|too_short|unrealistic_length|unrealistic_weight|too_long|too_short|too_old|too_light")
+
+#create a df with all odd individuals that have relevant issues
+all_odd_relevant <- all_odd %>%
+  filter(str_detect(issue, relevant))
+
+#create a dataframe with all individuals that have relevant issues and are not validated
+all_odd_relevant_unvalidated <- all_odd_unvalidated %>%
+  filter(str_detect(issue, relevant))
+
+#create a dataframe with all eels except those with any unvalidated issues 
+forLHT_safe <- df_all_length %>% 
+  anti_join(all_odd_unvalidated, by = "mei_fi_id")
+
+#create a dataframe with all eels except those with highly relevant unvalidated issues 
+forLHT_middleground <- df_all_length %>% 
+  anti_join(all_odd_relevant_unvalidated, by = "mei_fi_id")
+
+#store relevant tables
+save(df_all_length, file = "data/issues/all_ind_with_length.RData")
+save(forLHT_safe, forLHT_middleground, file = "data/issues/data_for_LHTs.RData")
+save(all_odd, all_odd_validated, all_odd_unvalidated, all_odd_unvalidated_relevant, file = "data/issues/odd_data.RData")
+
+
+```
