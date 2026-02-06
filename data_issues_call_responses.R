@@ -1,3 +1,7 @@
+# IF ANOTHER CALL IS ISSUED; THIS SCRIPT NEEDS TO BE EDITED TO ACCOUNT FOR FISH THAT WERE ALREADY VALIDATED IN A PREVIOUS CALL ###
+
+
+
 # define libraries needed
 libs <- c("tidyverse", "readxl", "stringr", "purrr") 
 

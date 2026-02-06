@@ -30,7 +30,7 @@ taf.skeleton()
 # 2. CREATE METADATA (.bib file) ###############################################
 
 #create metadata for script
-draft.data(data.scripts = "compilation.R",
+draft.data(data.scripts = "compilation_base.R",
            data.files = NULL,
            originator = "WGEEL",
            title = "Individual eel data pulled from WGEEL database as of 01-16-2025, individual biometric data (time series & sampling series combined)",
@@ -40,6 +40,15 @@ draft.data(data.scripts = "compilation.R",
            append = F
 )
 
+draft.data(data.scripts = "compilation.R",
+           data.files = NULL,
+           originator = "WGEEL",
+           title = "Individual eel data pulled from WGEEL database as of 02-04-2026, individual biometric data (time series & sampling series combined)",
+           file = TRUE,
+           period = "x-2025",
+           access = "Restricted",
+           append = T
+)
 
 # 3. IMPORT DATA FROM ABOVE TO BOOTSTRAP/DATA FOLDER ###########################
 
@@ -50,10 +59,15 @@ taf.boot(software = FALSE)
 #if (!file.exists("output_inventory.rmd")) {
 #  file.create("output_inventory.rmd")
 #} else {
-#  message("Die Datei existiert bereits.")
+#  message("output_inventory.rmd already exists")
 #}
 
-
+#create data_issues.rmd
+#if (!file.exists("data_issues.rmd")) {
+#  file.create("data_issues.rmd")
+#} else {
+#  message("data_issues.rmd already exists")
+#}
 
 
 #--------------------------------------------------------------------------------#
@@ -89,8 +103,10 @@ rm(list = ls())
 
 # run the scripts
 source("data.R")
-  #rmarkdown::render('data_issues.Rmd', output_file = "data/issues/issues.html")
+  rmarkdown::render('data_issues_report_base.Rmd', output_file = "data/issues/issues_report_base.html")
+  rmarkdown::render('data_issues_report.Rmd', output_file = "data/issues/issues_report.html")
   #source("data_issues_call.R")
+  #source("data_issues_call_responses.R")
   #source("data_LHTsite.R")
   #source("data_LHTemu.R")
 #source("model.R")
