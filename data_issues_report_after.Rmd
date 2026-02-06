@@ -60,7 +60,7 @@ This section summarizes the response to the data call on issues identified in th
 #COUNT RESPONSES BY COUNTRY
 
 # Define the path from project root
-folder_path <- "data/issues/data_call_base_response"
+folder_path <- "../call_responses_base"
 
 # List files
 file_list <- list.files(path = folder_path, 
@@ -1104,7 +1104,7 @@ forLHT_middleground <- df_all_length %>%
 #store relevant tables
 save(df_all_length, file = "data/issues/all_ind_with_length.RData")
 save(forLHT_safe, forLHT_middleground, file = "data/issues/data_for_LHTs.RData")
-save(all_odd, all_odd_validated, all_odd_unvalidated, all_odd_unvalidated_relevant, file = "data/issues/odd_data.RData")
+save(all_odd, all_odd_validated, all_odd_unvalidated, all_odd_relevant_unvalidated, file = "data/issues/odd_data.RData")
 
 
 ```
