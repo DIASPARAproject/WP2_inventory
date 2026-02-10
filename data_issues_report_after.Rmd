@@ -12,7 +12,7 @@ output:
 ```{r Initial preparations, echo=FALSE, warning = FALSE, message = FALSE}
 
 # define libraries needed
-libs <- c("tools", "tidyverse", "icesTAF", "stringr", "flextable", "ggplot2", "viridis", "purrr", "quantreg", "RColorBrewer") 
+libs <- c("tools", "tidyverse", "icesTAF", "stringr", "flextable", "ggplot2", "viridis", "purrr", "quantreg", "RColorBrewer", "readxl") 
 
 #define libraries already installed
 installed_libs <- libs %in% rownames(installed.packages())
@@ -164,6 +164,9 @@ summary_issues_base %>%
   colformat_int(big.mark = " ") %>%
   hline(i = nrow(summary_issues_base) - 1, part = "body", border = officer::fp_border(width = 1)) %>%
   autofit()
+
+#store relevant data
+
 
 ```
 
@@ -1093,6 +1096,10 @@ all_odd_relevant <- all_odd %>%
 all_odd_relevant_unvalidated <- all_odd_unvalidated %>%
   filter(str_detect(issue, relevant))
 
+#create a dataframe with all individuals that have minor issues and are not validated
+all_odd_minor_unvalidated <- all_odd_unvalidated %>%
+  filter(!str_detect(issue, relevant))
+
 #create a dataframe with all eels except those with any unvalidated issues 
 forLHT_safe <- df_all_length %>% 
   anti_join(all_odd_unvalidated, by = "mei_fi_id")
@@ -1104,7 +1111,7 @@ forLHT_middleground <- df_all_length %>%
 #store relevant tables
 save(df_all_length, file = "data/issues/all_ind_with_length.RData")
 save(forLHT_safe, forLHT_middleground, file = "data/issues/data_for_LHTs.RData")
-save(all_odd, all_odd_validated, all_odd_unvalidated, all_odd_relevant_unvalidated, file = "data/issues/odd_data.RData")
+save(all_odd_base, df_corrected, all_odd, all_odd_validated, all_odd_unvalidated, all_odd_relevant_unvalidated, all_odd_minor_unvalidated, relevant, file = "data/issues/odd_data.RData")
 
 
 ```

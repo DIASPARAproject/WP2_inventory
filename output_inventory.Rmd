@@ -12,7 +12,7 @@ output:
 ```{r Initial preparations, echo=FALSE, warning = FALSE, message = FALSE}
 
 # define libraries needed
-libs <- c("tidyverse", "icesTAF", "stringr", "flextable", "sf", "ggplot2", "viridis") 
+libs <- c("tidyverse", "icesTAF", "stringr", "flextable", "sf", "ggplot2", "viridis", "RColorBrewer") 
 
 #define libraries already installed
 installed_libs <- libs %in% rownames(installed.packages())
@@ -28,6 +28,11 @@ invisible(lapply(libs, library, character.only = T))
 #load data 
 load("boot/data/compilation/individual_wide.RData") 
 load("data/individual_all.RData")
+load("data/individual_all_base.RData")
+load("data/issues/all_ind_with_length.RData")
+load("data/issues/data_for_LHTs.RData")
+load("data/issues/odd_data.RData")
+
 
 #load shapefile of EMUs
 EMUs <- read_sf("utility/emu_shapefile/emu.shp")
@@ -45,27 +50,67 @@ map_basic <- ggplot() +
 
 ```
 
-# Data Inventory
+# 1. Basic numbers
 
-## Counts of eels, countries, EMUs, sites
+## 1.1 Counts of eels, countries, EMUs, sites
 
 ```{r numbers for text, echo=FALSE, warning = FALSE, message = FALSE}
 
 # 2.1 Totals ####
 #total number of individuals
-total_individuals_n <- nrow(individual_wide)
+total_individuals_n <- nrow(individual_all)
 cat(paste("Total number of eels:", total_individuals_n, sep = " "), "\n")
 cat("\n")
 
+#total number of individuals base
+total_individuals_n_base <- nrow(individual_all_base)
+cat(paste("Total number of eels base:", total_individuals_n_base, sep = " "), "\n")
+cat("\n")
+
+#total number of individuals base with issues
+total_individuals_n_base_issues <- nrow(all_odd_base)
+cat(paste("Total number of eels base identified with issues:", total_individuals_n_base_issues, sep = " "), "\n")
+cat("\n")
+
+#total number of individuals base with issues answered
+total_individuals_n_base_issues_answered <- nrow(df_corrected)
+cat(paste("Total number of eels base identified with issues answered:", total_individuals_n_base_issues_answered, sep = " "), "\n")
+cat("\n")
+
+#total number of glass eels in the dataset
+total_individuals_glass <- nrow(individual_all %>% filter(lfs_code == "G"))
+cat(paste("Total number of glass eels:", total_individuals_glass, sep = " "), "\n")
+cat("\n")
+
+#total number with length
+length_individuals_length <- nrow(df_all_length)
+cat(paste("Total number of eels with length:", length_individuals_length, sep = " "), "\n")
+cat("\n")
+
+#total number validated
+length_validated_n <- nrow(all_odd_validated)
+cat(paste("Total number of eels with validated/corrected issues in db:", length_validated_n, sep = " "), "\n")
+cat("\n")
+
+#total number with issues
+length_unvalidated_n <- nrow(all_odd_unvalidated)
+cat(paste("Total number of eels with remaining issues in db:", length_unvalidated_n, sep = " "), "\n")
+cat("\n")
+
+#total number with minor issues
+length_unvalidated_minor_n <- nrow(all_odd_minor_unvalidated)
+cat(paste("Total number of eels with minor issues:", length_unvalidated_minor_n, sep = " "), "\n")
+cat("\n")
+
 #total number of countries
-total_countries <- unique(individual_wide$ser_cou_code)
-total_countries_n <- length(unique(individual_wide$ser_cou_code))
+total_countries <- unique(individual_all$ser_cou_code)
+total_countries_n <- length(unique(individual_all$ser_cou_code))
 cat(sprintf("Total number of countries: %d (%s)\n", total_countries_n, sprintf("%s", paste(total_countries, collapse = ", "))))
 cat("\n")
 
 #total number of EMUs
-total_emus <- unique(individual_wide$ser_emu_nameshort)
-total_emus_n <- length(unique(individual_wide$ser_emu_nameshort))
+total_emus <- unique(individual_all$ser_emu_nameshort)
+total_emus_n <- length(unique(individual_all$ser_emu_nameshort))
 #cat(paste(paste("Total number of EMUs:", n_EMUs, sep = " "), " (", paste(format(EMUs_total, big.mark = ","), collapse =", "), ")", sep = ""), "\n")
 cat(sprintf("Total number of EMUs: %d (%s)\n", total_emus_n, sprintf("%s", paste(total_emus, collapse = ", "))))
 cat("\n")
@@ -73,51 +118,51 @@ cat("\n")
 
 # 2.2 Series (TSD) ####
 #total number individuals from series
-series_individuals_n <- nrow(individual_wide %>% filter(source == "series"))
+series_individuals_n <- nrow(individual_all %>% filter(source == "series"))
 cat(paste("Total number of eels in series:", series_individuals_n, sep = " "), "\n")
 cat("\n")
 
 #total number of countries providing time series data
-series_countries <- unique((individual_wide %>% filter(source == "series"))$ser_cou_code)
-series_countries_n <- length(unique((individual_wide %>% filter(source == "series"))$ser_cou_code))
+series_countries <- unique((individual_all %>% filter(source == "series"))$ser_cou_code)
+series_countries_n <- length(unique((individual_all %>% filter(source == "series"))$ser_cou_code))
 cat(sprintf("Total number of countries in series: %d (%s)\n", series_countries_n, sprintf("%s", paste(series_countries, collapse = ", "))))
 cat("\n")
 
 #total number of series
-series_sites <- unique((individual_wide %>% filter(source == "series"))$ser_nameshort)
-series_sites_n <- length(unique((individual_wide %>% filter(source == "series"))$ser_nameshort))
+series_sites <- unique((individual_all %>% filter(source == "series"))$ser_nameshort)
+series_sites_n <- length(unique((individual_all %>% filter(source == "series"))$ser_nameshort))
 cat(sprintf("Total number of sites in series: %d (%s)\n", series_sites_n, sprintf("%s", paste(series_sites, collapse = ", "))))
 cat("\n")
 
 
 # 2.3 Sampling (OSD) ####
 #total number individuals from sampling
-sampling_individuals_n <- nrow(individual_wide %>% filter(source == "sampling"))
+sampling_individuals_n <- nrow(individual_all %>% filter(source == "sampling"))
 cat(paste("Total number of eels in other sampling:", sampling_individuals_n, sep = " "), "\n")
 cat("\n")
 
 #total number of countries providing other sampling data
-sampling_countries <- unique((individual_wide %>% filter(source == "sampling"))$ser_cou_code)
-sampling_countries_n <- length(unique((individual_wide %>% filter(source == "sampling"))$ser_cou_code))
+sampling_countries <- unique((individual_all %>% filter(source == "sampling"))$ser_cou_code)
+sampling_countries_n <- length(unique((individual_all %>% filter(source == "sampling"))$ser_cou_code))
 cat(sprintf("Total number of countries in other sampling: %d (%s)\n", sampling_countries_n, sprintf("%s", paste(sampling_countries, collapse = ", "))))
 cat("\n")
 
 #total number of other sampling
-sampling_emus <- unique((individual_wide %>% filter(source == "sampling"))$ser_emu_nameshort)
-sampling_emus_n <- length(unique((individual_wide %>% filter(source == "sampling"))$ser_emu_nameshort))
+sampling_emus <- unique((individual_all %>% filter(source == "sampling"))$ser_emu_nameshort)
+sampling_emus_n <- length(unique((individual_all %>% filter(source == "sampling"))$ser_emu_nameshort))
 cat(sprintf("Total number of EMUs in other sampling: %d (%s)\n", sampling_emus_n, sprintf("%s", paste(sampling_emus, collapse = ", "))))
 cat("\n")
 
 # 2.3 Data from EU sampling ####
 
 # DCF Data
-DCF_only <- individual_wide %>% filter(sai_samplingobjective == "EU DCF" | sai_samplingobjective == "DCF" | sai_samplingobjective == "EU_DCF" | sai_samplingobjective == "EU DCF and UK (NI) Govt funded")
+DCF_only <- individual_all %>% filter(str_detect(sai_samplingobjective, "DCF"))
 DCF_only_n <- nrow(DCF_only)
 cat("Total number eels explicitly reported as at least partly derived from DCF: ", DCF_only_n, " (", round((DCF_only_n/total_individuals_n)*100, 1), "%", " of total", ")", sep = "", "\n")
 cat("\n")
 
 # EMP data
-EMP_only <- individual_wide %>% filter(sai_samplingobjective == "GaliciaEMP" | sai_samplingobjective == "CatalanEMP" | sai_samplingobjective == "AndaluciaEMP" | sai_samplingobjective == "MurciaEMP")
+EMP_only <- individual_all %>% filter(str_detect(sai_samplingobjective, "EMP"))
 EMP_only_n <- nrow(EMP_only)
 cat("Total number eels reported as sampled within EMPs: ", EMP_only_n, " (", round((EMP_only_n/total_individuals_n)*100, 1), "%", " of total", ")", sep = "", "\n")
 cat("\n")
@@ -136,11 +181,11 @@ cat("\n")
 
 # eels in series with length less 151mm (OSD)
 sampling_length_150minus_n <- nrow(individual_all %>% filter(source == "sampling") %>% filter(lengthmm < 151 & (lfs_code == "Y" | lfs_code == "S")))
-cat("Total number eels reported with length less 100mm in OSD: ", sampling_length_150minus_n, sep = "", "\n")
+cat("Total number eels reported with length less 150mm in OSD: ", sampling_length_150minus_n, sep = "", "\n")
 cat("\n")
 
 ```
-## Male/Female Proportions
+## 1.2 Male/Female Proportions
 
 ```{r male/female proportions, echo=FALSE, warning = FALSE, message = FALSE}
 
@@ -215,9 +260,12 @@ cat("Number of male yellow eels below 45cm: ", n_yellowmales_45minus, "\n")
 
 ```
 
-## Inventory
+## 2. Inventory
 
-### By Site
+### 2.1 By Year
+
+### 2.1 by Site
+
 
 ```{r inventory by site, echo=FALSE, warning = FALSE, message = FALSE}
 
@@ -295,7 +343,7 @@ flextable(site_table) %>% set_table_properties(layout = "autofit")
 ```
 \n
 \n
-### by EMU
+### 2.2 by EMU
 \n
 ```{r inventory by emu, echo=FALSE, warning = FALSE, message = FALSE}
 
@@ -365,10 +413,144 @@ emu_table <- inventory_emu %>%
 
 flextable(emu_table) %>% set_table_properties(layout = "autofit")
 ```
+\n
+\n
+### 2.3 by year
+\n
+```{r inventory by year, echo=FALSE, warning = FALSE, message = FALSE}
 
-## Maps
+# Create the summary table
+country_year <- individual_all %>%
+  group_by(fi_year, ser_cou_code) %>%
+  summarize(row_count = n(), .groups = "drop")
 
-### Growth by site
+#order categories Y
+ordered_categories_Y <- c(
+  "invalid",
+  "other",
+  "other_stage",
+  "stage_plus_missing",
+  "no_stage",
+  "all_missing_Y",
+  "no_age_length_Y",
+  "no_length_sex_Y",
+  "no_age_sex_Y",
+  "no_sex_Y",
+  "no_length_Y",
+  "no_age_Y",
+  "suitable_Y"
+)
+
+#code availabilty per year (growth)
+availability_year_growth <- individual_all %>%
+  left_join(all_odd_unvalidated %>% select(mei_fi_id, issue), by = "mei_fi_id") %>% 
+  mutate(availability = case_when(str_detect(issue, relevant) & !is.na(issue) ~ "invalid",
+                    !is.na(ageyear) & !is.na(lengthmm) & lfs_code == "Y" & !is.na(sex) ~ "suitable_Y",
+                    is.na(ageyear) & !is.na(lengthmm) & lfs_code == "Y" & !is.na(sex) ~ "no_age_Y",
+                    !is.na(ageyear) & is.na(lengthmm) & lfs_code == "Y" & !is.na(sex) ~ "no_length_Y",
+                    !is.na(ageyear) & !is.na(lengthmm) & lfs_code == "Y" & is.na(sex) ~ "no_sex_Y",
+                    is.na(ageyear) & !is.na(lengthmm) & lfs_code == "Y" & is.na(sex) ~ "no_age_sex_Y",
+                    !is.na(ageyear) & is.na(lengthmm) & lfs_code == "Y" & is.na(sex) ~ "no_length_sex_Y",
+                    is.na(ageyear) & is.na(lengthmm) & lfs_code == "Y" & !is.na(sex) ~ "no_age_length_Y",
+                    lfs_code == "Y" ~ "all_missing_Y",
+                    !is.na(ageyear) & !is.na(lengthmm) & (is.na(lfs_code) | lfs_code == "GY" | lfs_code == "YS") & !is.na(sex) ~ "no_stage",
+                    lfs_code == "GY" | lfs_code == "YS" | is.na(lfs_code) ~ "stage_plus_missing",
+                    lfs_code == "G" | lfs_code == "S" ~ "other_stage",
+                    TRUE ~ "other")) %>% 
+  #filter(availability == "all_missing_Y")
+  mutate(availability = factor(availability, levels = ordered_categories_Y)) %>%
+  group_by(fi_year, availability) %>%
+  summarize(row_count = n(), .groups = "drop")
+
+#order categories S
+ordered_categories_S <- c(
+  "invalid",
+  "other",
+  "other_stage",
+  "stage_plus_missing",
+  "no_stage",
+  "all_missing_S",
+  "no_length_sex_S",
+  "no_sex_S",
+  "no_length_S",
+  "suitable_S"
+)
+
+#code availabilty per year (maturation)
+availability_year_mat <- individual_all %>%
+  left_join(all_odd_unvalidated %>% select(mei_fi_id, issue), by = "mei_fi_id") %>% 
+  mutate(availability = case_when(str_detect(issue, relevant) & !is.na(issue) ~ "invalid",
+                    !is.na(lengthmm) & lfs_code == "S" & !is.na(sex) ~ "suitable_S",
+                    is.na(lengthmm) & lfs_code == "S" & !is.na(sex) ~ "no_length_S",
+                    !is.na(lengthmm) & lfs_code == "S" & is.na(sex) ~ "no_sex_S",
+                    is.na(lengthmm) & lfs_code == "S" & is.na(sex) ~ "no_length_sex_S",
+                    lfs_code == "S" ~ "all_missing_S",
+                    !is.na(lengthmm) & (is.na(lfs_code) | lfs_code == "YS") & !is.na(sex) ~ "no_stage",
+                    lfs_code == "G" | lfs_code == "S"| lfs_code == "GY"| lfs_code == "Y" ~ "other_stage",
+                    lfs_code == "YS" | is.na(lfs_code) ~ "stage_plus_missing",
+                    TRUE ~ "other")) %>% 
+  #filter(availability == "other")
+  mutate(availability = factor(availability, levels = ordered_categories_S)) %>%
+  group_by(fi_year, availability) %>%
+  summarize(row_count = n(), .groups = "drop")
+
+#  Grab the 12 colors from the Paired palette
+my_colors <- brewer.pal(12, "Paired")
+
+
+
+# Generate the stacked bar charts
+inventory_by_country <- ggplot(country_year, aes(x = fi_year, y = row_count, fill = ser_cou_code)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_viridis_d(option = "turbo") +
+  labs(
+    x = "Year",
+    y = "No of individuals",
+    fill = "Country Code"
+  ) +
+  theme_minimal()
+
+# Generate the stacked bar chart
+inventory_by_availability_Y <- ggplot(availability_year_growth, aes(x = fi_year, y = row_count, fill = availability)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = my_colors) +
+  labs(
+    x = "Year",
+    y = "No of individuals",
+    fill = "Country Code"
+  ) +
+  theme_minimal()
+
+# Generate the stacked bar chart
+inventory_by_availability_S <- ggplot(availability_year_mat, aes(x = fi_year, y = row_count, fill = availability)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = my_colors) +
+  labs(
+    x = "Year",
+    y = "No of individuals",
+    fill = "Country Code"
+  ) +
+  theme_minimal()
+
+inventory_by_country
+inventory_by_availability_Y
+inventory_by_availability_S
+
+suit_growth <- sum(availability_year_growth$row_count[which(availability_year_growth$availability == "suitable_Y")])
+suit_mat <- sum(availability_year_mat$row_count[which(availability_year_mat$availability == "suitable_S")])
+totY <- nrow(individual_all %>% filter(lfs_code == "Y"))
+totS <- nrow(individual_all %>% filter(lfs_code == "S"))
+
+cat(sprintf("Eels suitable for growth analyses", print(suit_growth), sep = " "), "\n")
+cat(sprintf("Eels suitable for mat analyses", print(suit_mat), sep = " "), "\n")
+cat(sprintf("Eels Y", print(totY), sep = " "), "\n")
+cat(sprintf("Eels S", print(totS), sep = " "), "\n")
+
+```
+
+## 3. Maps
+
+### 3.1 Growth by site
 
 ```{r growth by site, echo=FALSE, warning = FALSE, message = FALSE, , dpi=300}
 
@@ -398,7 +580,7 @@ map_site_growth_f
 map_site_growth_m
 
 ```
-###Silvering by site
+### 3.2 Silvering by site
 
 ```{r silver by site, echo=FALSE, warning = FALSE, message = FALSE, dpi=300}
 
@@ -429,7 +611,7 @@ map_site_silver_m
 
 ```
 
-###growth by emu
+### 3.3 growth by emu
 
 ```{r growth by EMU, echo=FALSE, warning = FALSE, message = FALSE, dpi=300}
 
@@ -498,7 +680,7 @@ map_emu_growth_y_f
 map_emu_growth_y_m
 
 ```
-###silvering by EMU
+### 3.4 silvering by EMU
 
 ```{r silvering by EMU, echo=FALSE, warning = FALSE, message = FALSE, dpi=300}
 
